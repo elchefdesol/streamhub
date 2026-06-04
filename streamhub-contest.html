@@ -1,0 +1,1521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StreamHub - Unified Live Chat</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #08090c;
+    --panel: #11141a;
+    --panel-2: #171b24;
+    --panel-3: #1d2330;
+    --line: #2a3242;
+    --text: #f3f6fa;
+    --muted: #8d98aa;
+    --soft: #c9d0dc;
+    --accent: #18d6a3;
+    --accent-2: #7c6df2;
+    --danger: #ff6978;
+    --twitch: #9146ff;
+    --kick: #53fc18;
+    --x: #f4f6f8;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; margin: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+
+  button, input, select { font: inherit; }
+  button { border: 0; }
+
+  .app {
+    height: 100%;
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    background:
+      linear-gradient(180deg, rgba(124, 109, 242, .08), transparent 230px),
+      radial-gradient(circle at 18% 0%, rgba(24, 214, 163, .10), transparent 280px),
+      var(--bg);
+  }
+
+  body.setup-active .app {
+    display: none;
+  }
+
+  .setup-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background:
+      linear-gradient(180deg, rgba(124, 109, 242, .10), transparent 260px),
+      radial-gradient(circle at 18% 0%, rgba(24, 214, 163, .12), transparent 320px),
+      var(--bg);
+    padding: 22px;
+    overflow-y: auto;
+  }
+
+  body:not(.setup-active) .setup-screen {
+    display: none;
+  }
+
+  .setup-shell {
+    width: min(1080px, 100%);
+    min-height: calc(100vh - 44px);
+    margin: 0 auto;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 16px;
+  }
+
+  .setup-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .setup-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .setup-title h1 {
+    margin: 0;
+    font-size: 1.4rem;
+    letter-spacing: .03em;
+  }
+
+  .setup-title p {
+    margin: 5px 0 0;
+    color: var(--muted);
+    font-size: .86rem;
+  }
+
+  .setup-count {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(17, 20, 26, .86);
+    padding: 10px 12px;
+    min-width: 130px;
+    text-align: center;
+  }
+
+  .setup-count strong {
+    display: block;
+    font-size: 1.65rem;
+    line-height: 1;
+  }
+
+  .setup-count span {
+    color: var(--muted);
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .setup-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    align-content: start;
+  }
+
+  .setup-card {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(17, 20, 26, .92);
+    overflow: hidden;
+  }
+
+  .setup-card-head {
+    min-height: 58px;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(29, 35, 48, .52);
+  }
+
+  .setup-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,.1);
+  }
+
+  .setup-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .setup-card-head strong {
+    display: block;
+    font-size: .94rem;
+  }
+
+  .setup-card-head small {
+    color: var(--muted);
+    font-size: .72rem;
+  }
+
+  .setup-card-body {
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .status-chip {
+    min-width: 86px;
+    height: 24px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    display: inline-grid;
+    place-items: center;
+    padding: 0 8px;
+    color: var(--muted);
+    font-size: .68rem;
+    font-weight: 900;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .status-chip.live {
+    color: #05100d;
+    background: var(--accent);
+    border-color: transparent;
+  }
+
+  .status-chip.connecting {
+    color: #ffe2a6;
+    border-color: rgba(247, 185, 85, .35);
+    background: rgba(247, 185, 85, .10);
+  }
+
+  .status-chip.error {
+    color: #ffd9de;
+    border-color: rgba(255, 105, 120, .35);
+    background: rgba(255, 105, 120, .10);
+  }
+
+  .setup-actions {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(17, 20, 26, .9);
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .setup-actions .note {
+    max-width: 560px;
+  }
+
+  header {
+    min-height: 68px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(12, 14, 20, .9);
+    backdrop-filter: blur(18px);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .mark {
+    width: 38px;
+    height: 38px;
+    border: 1px solid rgba(24, 214, 163, .45);
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, rgba(24, 214, 163, .18), rgba(124, 109, 242, .16));
+    flex: 0 0 auto;
+  }
+
+  .mark svg { width: 22px; height: 22px; }
+  .brand h1 { margin: 0; font-size: 1.15rem; line-height: 1; letter-spacing: .04em; }
+  .brand p { margin: 4px 0 0; color: var(--muted); font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .header-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .pill {
+    height: 32px;
+    border: 1px solid var(--line);
+    background: rgba(23, 27, 36, .88);
+    color: var(--soft);
+    border-radius: 999px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: .78rem;
+    white-space: nowrap;
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--muted);
+  }
+
+  .live-dot.on {
+    background: var(--accent);
+    box-shadow: 0 0 0 5px rgba(24, 214, 163, .12);
+    animation: pulse 1.6s infinite;
+  }
+
+  @keyframes pulse { 50% { opacity: .35; transform: scale(.82); } }
+
+  .icon-btn, .text-btn {
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    display: inline-grid;
+    place-items: center;
+    cursor: pointer;
+    transition: border-color .15s, transform .15s, background .15s;
+  }
+
+  .icon-btn { width: 36px; }
+  .icon-btn svg { width: 17px; height: 17px; }
+
+  .text-btn {
+    padding: 0 12px;
+    font-weight: 800;
+    font-size: .78rem;
+    letter-spacing: .02em;
+    display: inline-flex;
+    gap: 7px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .icon-btn:hover, .text-btn:hover {
+    border-color: rgba(24, 214, 163, .55);
+    background: var(--panel-3);
+    transform: translateY(-1px);
+  }
+
+  .text-btn.primary {
+    background: var(--accent);
+    color: #05100d;
+    border-color: transparent;
+  }
+
+  .text-btn.danger {
+    color: #ffd9de;
+    border-color: rgba(255, 105, 120, .35);
+    background: rgba(255, 105, 120, .10);
+  }
+
+  .text-btn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .toolbar {
+    padding: 9px 18px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(17, 20, 26, .94);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .tabs { display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+
+  .tab {
+    min-height: 34px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #10131a;
+    color: var(--muted);
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .tab.active {
+    color: var(--text);
+    background: var(--panel-3);
+    border-color: rgba(24, 214, 163, .55);
+  }
+
+  .tab svg { width: 15px; height: 15px; }
+
+  .tab-count {
+    min-width: 22px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgba(124, 109, 242, .24);
+    color: var(--text);
+    display: inline-grid;
+    place-items: center;
+    font-size: .7rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .search {
+    min-width: 160px;
+    max-width: 360px;
+    width: 100%;
+    justify-self: center;
+    height: 34px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #0e1117;
+    color: var(--text);
+    padding: 0 11px;
+    outline: none;
+  }
+
+  .search:focus { border-color: rgba(24, 214, 163, .6); }
+
+  .controls { display: flex; align-items: center; gap: 8px; }
+
+  main {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+
+  .feed-wrap {
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .status-strip {
+    height: 34px;
+    padding: 0 18px;
+    border-bottom: 1px solid rgba(42, 50, 66, .7);
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: .76rem;
+  }
+
+  .status-strip strong { color: var(--soft); font-weight: 800; }
+
+  .feed {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(5, 7, 10, .38);
+  }
+
+  .feed::-webkit-scrollbar { width: 7px; }
+  .feed::-webkit-scrollbar-thumb { background: #293141; border-radius: 999px; }
+
+  .msg {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 9px;
+    padding: 8px 9px;
+    border: 1px solid rgba(42, 50, 66, .34);
+    border-radius: 8px;
+    background: rgba(13, 16, 22, .44);
+    flex: 0 0 auto;
+    animation: enter .18s ease-out;
+  }
+
+  .msg:hover { background: rgba(23, 27, 36, .72); border-color: rgba(42, 50, 66, .82); }
+  @keyframes enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+  .source-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    border: 1px solid transparent;
+  }
+
+  .source-icon svg { width: 16px; height: 16px; }
+  .msg[data-source="twitch"] .source-icon { background: rgba(145, 70, 255, .16); border-color: rgba(145, 70, 255, .25); color: var(--twitch); }
+  .msg[data-source="kick"] .source-icon { background: rgba(83, 252, 24, .12); border-color: rgba(83, 252, 24, .22); color: var(--kick); }
+  .msg[data-source="x"] .source-icon { background: rgba(244, 246, 248, .08); border-color: rgba(244, 246, 248, .16); color: var(--x); }
+
+  .msg-main { min-width: 0; }
+  .msg-meta { display: flex; align-items: baseline; gap: 7px; min-width: 0; flex-wrap: wrap; }
+  .user { font-weight: 800; font-size: .9rem; overflow-wrap: anywhere; }
+  .msg[data-source="twitch"] .user { color: #cdb6ff; }
+  .msg[data-source="kick"] .user { color: #aaff88; }
+  .msg[data-source="x"] .user { color: #f3f5f7; }
+
+  .source-label, .badge {
+    height: 18px;
+    border-radius: 999px;
+    padding: 0 7px;
+    display: inline-grid;
+    place-items: center;
+    font-size: .64rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+  }
+
+  .source-label {
+    border: 1px solid rgba(255, 255, 255, .08);
+    color: var(--soft);
+    background: rgba(255, 255, 255, .04);
+  }
+
+  .badge { background: rgba(247, 185, 85, .13); color: #ffd88c; }
+  .text { margin-top: 3px; color: var(--text); line-height: 1.38; font-size: .94rem; word-break: break-word; }
+  .time { color: var(--muted); font-size: .72rem; font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 2px; }
+
+  .composer {
+    min-height: 58px;
+    border-top: 1px solid var(--line);
+    background: rgba(17, 20, 26, .96);
+    display: grid;
+    grid-template-columns: 128px minmax(0, 1fr) auto;
+    gap: 9px;
+    align-items: center;
+    padding: 10px 14px;
+  }
+
+  .composer select, .composer input {
+    height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #0e1117;
+    color: var(--text);
+    padding: 0 10px;
+    outline: none;
+  }
+
+  .composer input:focus, .composer select:focus { border-color: rgba(24, 214, 163, .62); }
+
+  aside {
+    min-width: 0;
+    min-height: 0;
+    border-left: 1px solid var(--line);
+    background: rgba(15, 18, 24, .88);
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+  }
+
+  .panel-section { padding: 14px; border-bottom: 1px solid var(--line); }
+  .section-title { margin: 0 0 10px; color: var(--muted); font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { min-height: 66px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 9px; }
+  .stat b { display: block; font-size: 1.35rem; line-height: 1; font-variant-numeric: tabular-nums; }
+  .stat span { display: block; margin-top: 6px; color: var(--muted); font-size: .72rem; }
+
+  .source-list { display: grid; gap: 7px; }
+  .source-row { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 9px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; }
+  .source-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); }
+  .source-row.live .source-dot { background: var(--accent); box-shadow: 0 0 0 4px rgba(24, 214, 163, .10); }
+  .source-row.error .source-dot { background: var(--danger); box-shadow: 0 0 0 4px rgba(255, 105, 120, .10); }
+  .source-row strong { display: block; font-size: .82rem; }
+  .source-row small { color: var(--muted); font-size: .7rem; }
+  .source-row em { color: var(--soft); font-style: normal; font-size: .78rem; font-variant-numeric: tabular-nums; }
+
+  .connection-panel { min-height: 0; overflow-y: auto; padding: 14px; }
+  .note { color: var(--muted); font-size: .72rem; line-height: 1.38; }
+  .note code { color: var(--soft); }
+
+  .help-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .help-links a {
+    min-height: 26px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 9px;
+    color: var(--soft);
+    background: rgba(255,255,255,.03);
+    font-size: .7rem;
+    font-weight: 800;
+    text-decoration: none;
+  }
+
+  .help-links a:hover {
+    border-color: rgba(24, 214, 163, .5);
+    color: var(--accent);
+  }
+
+  .drawer {
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 6, 10, .68);
+    display: none;
+    align-items: stretch;
+    justify-content: flex-end;
+    z-index: 10;
+  }
+
+  .drawer.open { display: flex; }
+  .drawer-card { width: min(430px, 100vw); height: 100%; background: var(--panel); border-left: 1px solid var(--line); box-shadow: 0 18px 60px rgba(0,0,0,.38); display: grid; grid-template-rows: auto 1fr; }
+  .drawer-head { padding: 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .drawer-head h2 { margin: 0; font-size: 1rem; }
+
+  .connector { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 9px; overflow: hidden; }
+  .connector summary { cursor: pointer; padding: 11px; list-style: none; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; }
+  .connector summary::-webkit-details-marker { display: none; }
+  .connector summary strong { font-size: .84rem; }
+  .connector summary span { color: var(--muted); font-size: .72rem; }
+  .connector-body { border-top: 1px solid var(--line); padding: 11px; display: grid; gap: 9px; }
+
+  .field { display: grid; gap: 5px; }
+  .field label { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  .field input { height: 34px; border: 1px solid var(--line); border-radius: 8px; background: #0e1117; color: var(--text); padding: 0 9px; outline: none; }
+  .field input:focus { border-color: rgba(24, 214, 163, .62); }
+
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: .74rem;
+  }
+
+  .check-row input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+  }
+
+
+  .empty {
+    margin: auto;
+    color: var(--muted);
+    text-align: center;
+    max-width: 390px;
+    padding: 40px 20px;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 900px) {
+    .setup-grid { grid-template-columns: 1fr; }
+    main { grid-template-columns: 1fr; }
+    aside { display: none; }
+    .toolbar { grid-template-columns: 1fr; }
+    .search { justify-self: stretch; max-width: none; }
+    .controls { justify-content: space-between; }
+  }
+
+  @media (max-width: 640px) {
+    header { grid-template-columns: 1fr; align-items: start; }
+    .header-actions { justify-content: flex-start; }
+    .composer { grid-template-columns: 1fr auto; }
+    .composer select { display: none; }
+  }
+
+  body.overlay-mode {
+    background: transparent;
+  }
+
+  body.overlay-mode .app {
+    grid-template-rows: 1fr;
+    background: rgba(8, 9, 12, .72);
+  }
+
+  body.overlay-mode header,
+  body.overlay-mode .toolbar,
+  body.overlay-mode aside,
+  body.overlay-mode .composer {
+    display: none;
+  }
+
+  body.overlay-mode main {
+    grid-template-columns: 1fr;
+  }
+
+  body.overlay-mode .feed-wrap {
+    grid-template-rows: auto 1fr;
+  }
+
+  body.overlay-mode .feed {
+    padding: 14px;
+  }
+</style>
+</head>
+<body class="setup-active">
+<section class="setup-screen" id="setupScreen">
+  <div class="setup-shell">
+    <div class="setup-top">
+      <div class="setup-title">
+        <div class="mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M4 6.5h10.5a4.5 4.5 0 0 1 0 9H9l-5 3v-12Z" stroke="#18d6a3" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M15 8.5h5v8l-3-2h-2" stroke="#7c6df2" stroke-width="1.8" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Connect StreamHub</h1>
+          <p>Connect the platforms first, then launch the unified feed.</p>
+        </div>
+      </div>
+      <div class="setup-count">
+        <strong id="setupCount">0/3</strong>
+        <span>connected</span>
+      </div>
+    </div>
+
+    <div class="setup-grid">
+      <article class="setup-card">
+        <div class="setup-card-head">
+          <div class="setup-icon" style="color:var(--twitch); background:rgba(145,70,255,.14)"></div>
+          <div><strong>Twitch</strong><small>Live channel chat</small></div>
+          <span class="status-chip" id="setupStatus-twitch">Ready</span>
+        </div>
+        <div class="setup-card-body">
+          <div class="field"><label for="twitchChannel">Channel</label><input id="twitchChannel" placeholder="channelname"></div>
+          <div class="field"><label for="twitchToken">OAuth token</label><input id="twitchToken" type="password" placeholder="oauth:..."></div>
+          <label class="check-row"><input type="checkbox" id="rememberTwitchToken"> Remember token on this computer</label>
+          <div class="help-links">
+            <a href="https://twitchtokengenerator.com/" target="_blank" rel="noreferrer">Get Twitch chat token</a>
+            <a href="https://dev.twitch.tv/docs/authentication/scopes/" target="_blank" rel="noreferrer">Twitch scopes</a>
+          </div>
+          <button class="text-btn primary" type="button" id="connectTwitch">Connect Twitch</button>
+          <p class="note" id="setupMsg-twitch">Use a Twitch chat OAuth token with chat:read permission.</p>
+        </div>
+      </article>
+
+      <article class="setup-card">
+        <div class="setup-card-head">
+          <div class="setup-icon" style="color:var(--x); background:rgba(244,246,248,.08)"></div>
+          <div><strong>X</strong><small>Mentions / hashtag feed</small></div>
+          <span class="status-chip" id="setupStatus-x">Ready</span>
+        </div>
+        <div class="setup-card-body">
+          <div class="field"><label for="xBearer">Bearer token</label><input id="xBearer" type="password" placeholder="Paste X API bearer token"></div>
+          <label class="check-row"><input type="checkbox" id="rememberXBearer"> Remember token on this computer</label>
+          <div class="field"><label for="xQuery">Query</label><input id="xQuery" value="#elchefdesol OR @elchefdesol" placeholder="#yourstream OR @yourhandle"></div>
+          <div class="field"><label for="xProxy">Proxy URL</label><input id="xProxy" value="/x/stream" placeholder="/x/stream"></div>
+          <div class="help-links">
+            <a href="https://developer.x.com/en/portal/dashboard" target="_blank" rel="noreferrer">X developer portal</a>
+            <a href="https://docs.x.com/x-api/getting-started/pricing" target="_blank" rel="noreferrer">X API credits</a>
+            <a href="https://docs.x.com/x-api/posts/search/integrate/build-a-query" target="_blank" rel="noreferrer">Query syntax</a>
+          </div>
+          <button class="text-btn primary" type="button" id="connectX">Connect X</button>
+          <p class="note" id="setupMsg-x">Tracks public X posts matching your query. Native X livechat is not available through the public API yet.</p>
+        </div>
+      </article>
+
+      <article class="setup-card">
+        <div class="setup-card-head">
+          <div class="setup-icon" style="color:var(--kick); background:rgba(83,252,24,.10)"></div>
+          <div><strong>Kick</strong><small>Live channel chat</small></div>
+          <span class="status-chip" id="setupStatus-kick">Ready</span>
+        </div>
+        <div class="setup-card-body">
+          <div class="field"><label for="kickChannel">Channel</label><input id="kickChannel" placeholder="channelname"></div>
+          <div class="field"><label for="kickRoomId">Chatroom ID fallback</label><input id="kickRoomId" placeholder="Use if channel lookup fails"></div>
+          <div class="field"><label for="kickRelay">Proxy URL</label><input id="kickRelay" value="/kick/stream" placeholder="/kick/stream"></div>
+          <div class="help-links">
+            <a href="https://kick.com/" target="_blank" rel="noreferrer">Open Kick</a>
+            <a href="https://kick.com/api/v2/channels/elchefdesol" target="_blank" rel="noreferrer">Example chatroom JSON</a>
+          </div>
+          <button class="text-btn primary" type="button" id="connectKick">Connect Kick</button>
+          <p class="note" id="setupMsg-kick">Enter the Kick channel slug. If lookup fails, open kick.com/api/v2/channels/YOUR_CHANNEL and copy chatroom.id into the fallback field.</p>
+        </div>
+      </article>
+    </div>
+
+    <div class="setup-actions">
+      <p class="note" id="setupSummary">Connect at least one platform to launch the hub. Use Connect All to try every card with info filled in.</p>
+      <div class="header-actions">
+        <button class="text-btn" type="button" id="connectAllBtn">Connect All</button>
+        <button class="text-btn primary" type="button" id="launchHubBtn" disabled>Launch StreamHub</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M4 6.5h10.5a4.5 4.5 0 0 1 0 9H9l-5 3v-12Z" stroke="#18d6a3" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M15 8.5h5v8l-3-2h-2" stroke="#7c6df2" stroke-width="1.8" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <h1>StreamHub</h1>
+        <p>Unified real-time chat for Twitch, X, and Kick</p>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div class="pill"><span class="live-dot" id="liveDot"></span><span id="statusLabel">No sources connected</span></div>
+      <div class="pill"><strong id="totalCount">0</strong> messages</div>
+      <button class="icon-btn" id="pauseBtn" type="button" title="Pause feed" aria-label="Pause feed">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+      <button class="text-btn" id="connectBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" width="15" height="15"><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M4.5 12a7.5 7.5 0 1 0 15 0 7.5 7.5 0 0 0-15 0Z" stroke="currentColor" stroke-width="1.8"/></svg>
+        Connect
+      </button>
+    </div>
+  </header>
+
+  <section class="toolbar" aria-label="Feed controls">
+    <div class="tabs" id="tabs"></div>
+    <input class="search" id="searchInput" type="search" placeholder="Search usernames or messages">
+    <div class="controls">
+      <button class="icon-btn" id="clearBtn" type="button" title="Clear feed" aria-label="Clear feed">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M6 7h12M10 11v6M14 11v6M9 7l1-2h4l1 2M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </section>
+
+  <main>
+    <section class="feed-wrap" aria-label="Unified chat feed">
+      <div class="status-strip">
+        <span><strong id="activeLabel">All sources</strong> flowing into one feed</span>
+        <span id="rateLabel">0 msg/min</span>
+      </div>
+      <div class="feed" id="feed" role="log" aria-live="polite"></div>
+      <form class="composer" id="composer">
+        <select id="sendSource" aria-label="Source"></select>
+        <input id="messageInput" autocomplete="off" placeholder="Type a local note">
+        <button class="text-btn primary" type="submit">Send</button>
+      </form>
+    </section>
+
+    <aside aria-label="Activity summary">
+      <section class="panel-section">
+        <h2 class="section-title">Activity</h2>
+        <div class="stats">
+          <div class="stat"><b id="statTotal">0</b><span>Total</span></div>
+          <div class="stat"><b id="statRate">0</b><span>Last min</span></div>
+          <div class="stat"><b id="statPeak">0</b><span>Peak burst</span></div>
+          <div class="stat"><b id="statSources">0</b><span>Live sources</span></div>
+        </div>
+      </section>
+      <section class="panel-section">
+        <h2 class="section-title">Sources</h2>
+        <div class="source-list" id="sourceList"></div>
+      </section>
+      <section class="connection-panel">
+        <h2 class="section-title">X Setup</h2>
+        <p class="note">X does not behave like Twitch chat. For this app, X means near-real-time public Posts matching a query, hashtag, mention, or creator rule. Run the local proxy with your bearer token, then connect the X adapter.</p>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-card">
+    <div class="drawer-head">
+      <div>
+        <h2>Connect Sources</h2>
+        <div class="note">No demo feed. Messages appear only after a source sends them.</div>
+      </div>
+      <button class="icon-btn" id="closeDrawer" type="button" title="Close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none"><path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="connection-panel">
+      <details class="connector" open>
+        <summary>
+          <span class="source-dot" style="background: var(--x)"></span>
+          <strong>X Posts</strong>
+          <span>Local proxy</span>
+        </summary>
+        <div class="connector-body">
+          <button class="text-btn danger" type="button" id="disconnectX">Disconnect X</button>
+          <p class="note">Paste the token here, or start <code>server.mjs</code> with <code>X_BEARER_TOKEN</code>. The local server forwards normalized messages into StreamHub.</p>
+        </div>
+      </details>
+
+      <details class="connector">
+        <summary>
+          <span class="source-dot" style="background: var(--twitch)"></span>
+          <strong>Twitch Chat</strong>
+          <span>Direct websocket</span>
+        </summary>
+        <div class="connector-body">
+          <button class="text-btn danger" type="button" id="disconnectTwitch">Disconnect Twitch</button>
+        </div>
+      </details>
+
+      <details class="connector">
+        <summary>
+          <span class="source-dot" style="background: var(--kick)"></span>
+          <strong>Kick Chat</strong>
+          <span>Local relay</span>
+        </summary>
+        <div class="connector-body">
+          <button class="text-btn danger" type="button" id="disconnectKick">Disconnect Kick</button>
+          <p class="note">Kick is connected through the local StreamHub relay using the channel name from setup.</p>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+const sources = {
+  twitch: {
+    name: "Twitch",
+    color: "#9146ff",
+    icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.57 4.71h1.72v5.15h-1.72V4.71Zm4.72 0H18v5.15h-1.71V4.71ZM6 0 1.71 4.29v15.42h5.15V24l4.28-4.29h3.43L22.29 12V0H6Zm14.57 11.14-3.43 3.43h-3.43l-3 3v-3H6.86V1.71h13.71v9.43Z"/></svg>'
+  },
+  x: {
+    name: "X",
+    color: "#f4f6f8",
+    icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.24 2.25h3.31l-7.23 8.26 8.5 11.24h-6.65l-5.21-6.82-5.97 6.82H1.68l7.73-8.84L1.25 2.25h6.82l4.71 6.23 5.46-6.23Zm-1.16 17.52h1.83L7.08 4.13H5.12l11.96 15.64Z"/></svg>'
+  },
+  kick: {
+    name: "Kick",
+    color: "#53fc18",
+    icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 3h7v5h2.2L16 3h7l-5.1 8.1L23 21h-7l-2.8-5H11v5H4V3Z"/></svg>'
+  }
+};
+
+document.querySelector(".setup-card:nth-child(1) .setup-icon").innerHTML = sources.twitch.icon;
+document.querySelector(".setup-card:nth-child(2) .setup-icon").innerHTML = sources.x.icon;
+document.querySelector(".setup-card:nth-child(3) .setup-icon").innerHTML = sources.kick.icon;
+
+const state = {
+  messages: [],
+  counts: { twitch: 0, x: 0, kick: 0 },
+  status: { twitch: "ready", x: "ready", kick: "ready" },
+  filter: "all",
+  search: "",
+  paused: false,
+  rateWindow: [],
+  peak: 0,
+  streams: { x: null, kick: null, twitch: null }
+};
+
+const feed = document.getElementById("feed");
+const tabs = document.getElementById("tabs");
+const searchInput = document.getElementById("searchInput");
+const pauseBtn = document.getElementById("pauseBtn");
+const drawer = document.getElementById("drawer");
+const sendSource = document.getElementById("sendSource");
+const messageInput = document.getElementById("messageInput");
+const storageKey = "streamhub.setup.v1";
+const setupFieldIds = [
+  "twitchChannel",
+  "xQuery",
+  "xProxy",
+  "kickChannel",
+  "kickRoomId",
+  "kickRelay"
+];
+const secretFieldIds = [
+  ["twitchToken", "rememberTwitchToken"],
+  ["xBearer", "rememberXBearer"]
+];
+
+function nowTime() {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function sourceKeys() {
+  return Object.keys(sources);
+}
+
+function readStoredSetup() {
+  try {
+    return JSON.parse(localStorage.getItem(storageKey) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredSetup(patch = {}) {
+  const current = readStoredSetup();
+  localStorage.setItem(storageKey, JSON.stringify({ ...current, ...patch }));
+}
+
+function saveSetupFields() {
+  const data = {};
+  setupFieldIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) data[id] = el.value;
+  });
+
+  secretFieldIds.forEach(([fieldId, checkboxId]) => {
+    const field = document.getElementById(fieldId);
+    const checkbox = document.getElementById(checkboxId);
+    data[checkboxId] = Boolean(checkbox?.checked);
+    data[fieldId] = checkbox?.checked ? field?.value || "" : "";
+  });
+
+  writeStoredSetup(data);
+}
+
+function restoreSetupFields() {
+  const data = readStoredSetup();
+  setupFieldIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el && data[id] !== undefined) el.value = data[id];
+  });
+
+  secretFieldIds.forEach(([fieldId, checkboxId]) => {
+    const field = document.getElementById(fieldId);
+    const checkbox = document.getElementById(checkboxId);
+    if (checkbox) checkbox.checked = Boolean(data[checkboxId]);
+    if (field && data[checkboxId] && data[fieldId]) field.value = data[fieldId];
+  });
+}
+
+function bindSetupPersistence() {
+  [...setupFieldIds, ...secretFieldIds.flat()].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", saveSetupFields);
+    el.addEventListener("change", saveSetupFields);
+  });
+}
+
+function connectedCount() {
+  return sourceKeys().filter((key) => state.status[key] === "live").length;
+}
+
+function setSetupMessage(source, message) {
+  const el = document.getElementById(`setupMsg-${source}`);
+  if (el && message) el.textContent = message;
+}
+
+function setSourceStatus(source, status, message = "") {
+  state.status[source] = status;
+  setSetupMessage(source, message);
+  render();
+}
+
+function addMessage(source, user, text, badge = "") {
+  if (!sources[source]) return;
+  const msg = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    source,
+    user: user || "unknown",
+    text: text || "",
+    badge,
+    time: nowTime(),
+    ts: Date.now()
+  };
+
+  state.messages.push(msg);
+  if (state.messages.length > 1200) state.messages.shift();
+  state.counts[source] += 1;
+  state.rateWindow.push(msg.ts);
+  pruneRate();
+  render();
+}
+
+function pruneRate() {
+  const cutoff = Date.now() - 60000;
+  state.rateWindow = state.rateWindow.filter((ts) => ts > cutoff);
+  state.peak = Math.max(state.peak, state.rateWindow.length);
+}
+
+function visibleMessages() {
+  const q = state.search.trim().toLowerCase();
+  return state.messages.filter((msg) => {
+    if (state.filter !== "all" && msg.source !== state.filter) return false;
+    if (!q) return true;
+    return msg.text.toLowerCase().includes(q) || msg.user.toLowerCase().includes(q);
+  });
+}
+
+function messageNode(msg) {
+  const src = sources[msg.source];
+  const badge = msg.badge ? `<span class="badge">${escapeHtml(msg.badge)}</span>` : "";
+  const node = document.createElement("article");
+  node.className = "msg";
+  node.dataset.source = msg.source;
+  node.innerHTML = `
+    <div class="source-icon">${src.icon}</div>
+    <div class="msg-main">
+      <div class="msg-meta">
+        <span class="user">${escapeHtml(msg.user)}</span>
+        <span class="source-label">${src.name}</span>
+        ${badge}
+      </div>
+      <div class="text">${escapeHtml(msg.text)}</div>
+    </div>
+    <time class="time">${msg.time}</time>
+  `;
+  return node;
+}
+
+function renderFeed() {
+  const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 90;
+  const items = visibleMessages();
+  feed.innerHTML = "";
+
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerHTML = state.messages.length
+      ? "No messages match this view."
+      : "No messages yet. Connect X, Twitch, or Kick to start the unified feed.";
+    feed.appendChild(empty);
+  } else {
+    const frag = document.createDocumentFragment();
+    items.forEach((msg) => frag.appendChild(messageNode(msg)));
+    feed.appendChild(frag);
+  }
+
+  const maxScroll = Math.max(0, feed.scrollHeight - feed.clientHeight);
+  if (!state.paused && atBottom) feed.scrollTop = maxScroll;
+  if (feed.scrollTop > maxScroll) feed.scrollTop = maxScroll;
+}
+
+function renderTabs() {
+  const total = state.messages.length;
+  tabs.innerHTML = `<button class="tab ${state.filter === "all" ? "active" : ""}" type="button" data-filter="all">All <span class="tab-count">${total}</span></button>`;
+  sourceKeys().forEach((key) => {
+    const src = sources[key];
+    tabs.insertAdjacentHTML("beforeend", `
+      <button class="tab ${state.filter === key ? "active" : ""}" type="button" data-filter="${key}">
+        <span style="color:${src.color}">${src.icon}</span>
+        ${src.name}
+        <span class="tab-count">${state.counts[key]}</span>
+      </button>
+    `);
+  });
+}
+
+function renderSources() {
+  const list = document.getElementById("sourceList");
+  list.innerHTML = "";
+  sourceKeys().forEach((key) => {
+    const src = sources[key];
+    const status = state.status[key];
+    const row = document.createElement("div");
+    row.className = `source-row ${status === "live" ? "live" : ""} ${status === "error" ? "error" : ""}`;
+    row.innerHTML = `
+      <span class="source-dot" style="${status === "ready" ? `background:${src.color}; opacity:.38` : ""}"></span>
+      <span><strong>${src.name}</strong><small>${escapeHtml(status)}</small></span>
+      <em>${state.counts[key]}</em>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function renderStats() {
+  pruneRate();
+  const live = connectedCount();
+  document.getElementById("totalCount").textContent = state.messages.length;
+  document.getElementById("statTotal").textContent = state.messages.length;
+  document.getElementById("statRate").textContent = state.rateWindow.length;
+  document.getElementById("statPeak").textContent = state.peak;
+  document.getElementById("statSources").textContent = live;
+  document.getElementById("rateLabel").textContent = `${state.rateWindow.length} msg/min`;
+  document.getElementById("activeLabel").textContent = state.filter === "all" ? "All sources" : sources[state.filter].name;
+  document.getElementById("statusLabel").textContent = live ? `${live} source${live === 1 ? "" : "s"} connected` : "No sources connected";
+  document.getElementById("liveDot").classList.toggle("on", live > 0);
+  pauseBtn.title = state.paused ? "Resume feed" : "Pause feed";
+  pauseBtn.setAttribute("aria-label", pauseBtn.title);
+}
+
+function renderSetup() {
+  const live = connectedCount();
+  document.getElementById("setupCount").textContent = `${live}/3`;
+  document.getElementById("launchHubBtn").disabled = live === 0;
+  document.getElementById("setupSummary").textContent = live
+    ? `${live}/3 connected. Launch StreamHub when you are ready, or keep connecting more platforms.`
+    : "Connect at least one platform to launch the hub. Use Connect All to try every card with info filled in.";
+
+  sourceKeys().forEach((key) => {
+    const chip = document.getElementById(`setupStatus-${key}`);
+    if (!chip) return;
+    chip.className = `status-chip ${state.status[key]}`;
+    chip.textContent = state.status[key];
+  });
+}
+
+function renderSendOptions() {
+  sendSource.innerHTML = "";
+  sourceKeys().forEach((key) => {
+    const option = document.createElement("option");
+    option.value = key;
+    option.textContent = sources[key].name;
+    sendSource.appendChild(option);
+  });
+}
+
+function render() {
+  renderFeed();
+  renderTabs();
+  renderSources();
+  renderStats();
+  renderSetup();
+}
+
+function connectSse(source, url) {
+  disconnectSource(source);
+  setSourceStatus(source, "connecting", `Connecting ${sources[source].name}...`);
+  const stream = new EventSource(url);
+  state.streams[source] = stream;
+
+  stream.addEventListener("open", () => {
+    setSourceStatus(source, "live", `${sources[source].name} connected.`);
+  });
+
+  stream.addEventListener("message", (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      addMessage(payload.source || source, payload.user || payload.username, payload.text, payload.badge || "");
+    } catch (error) {
+      addMessage(source, "system", event.data, "RAW");
+    }
+  });
+
+  stream.addEventListener("error", (event) => {
+    if (event.data) {
+      try {
+        const payload = JSON.parse(event.data);
+        setSourceStatus(source, "error", payload.error || `${sources[source].name} connection failed.`);
+        return;
+      } catch {
+      }
+    }
+    setSourceStatus(source, "error", `${sources[source].name} connection failed. Check credentials or relay URL.`);
+  });
+
+  stream.addEventListener("error", () => {
+    if (state.status[source] !== "error") {
+      setSourceStatus(source, "error", `${sources[source].name} connection failed. Check credentials or relay URL.`);
+    }
+  });
+}
+
+async function configureXToken() {
+  saveSetupFields();
+  const token = document.getElementById("xBearer").value.trim();
+  if (!token) return true;
+  const response = await fetch("/config/x", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ bearerToken: token })
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || `Token config failed: HTTP ${response.status}`);
+  }
+  document.getElementById("xBearer").value = "";
+  return true;
+}
+
+async function hasConfiguredXToken() {
+  if (document.getElementById("xBearer").value.trim()) return true;
+  try {
+    const response = await fetch("/health");
+    const body = await response.json();
+    return Boolean(body.hasBearer);
+  } catch {
+    return false;
+  }
+}
+
+async function connectX() {
+  const query = document.getElementById("xQuery").value.trim();
+  const base = document.getElementById("xProxy").value.trim();
+  if (!query || !base) {
+    setSourceStatus("x", "error", "Enter an X query and proxy URL.");
+    return;
+  }
+  try {
+    if (!await hasConfiguredXToken()) {
+      setSourceStatus("x", "error", "Paste your X Bearer Token first, then click Connect X.");
+      return;
+    }
+    await configureXToken();
+    const resolved = new URL(base, window.location.origin);
+    resolved.searchParams.set("query", query);
+    connectSse("x", resolved.toString());
+  } catch (error) {
+    setSourceStatus("x", "error", error.message);
+    addMessage("x", "system", error.message, "ERROR");
+  }
+}
+
+function disconnectSource(source) {
+  const stream = state.streams[source];
+  if (stream) {
+    if (typeof stream.close === "function") stream.close();
+    state.streams[source] = null;
+  }
+  if (source === "twitch" && state.streams.twitch) {
+    try { state.streams.twitch.close(); } catch {}
+    state.streams.twitch = null;
+  }
+  setSourceStatus(source, "ready", `${sources[source].name} disconnected.`);
+}
+
+function connectKick() {
+  const channel = document.getElementById("kickChannel").value.trim().replace(/^@/, "");
+  const roomId = document.getElementById("kickRoomId").value.trim();
+  const relay = document.getElementById("kickRelay").value.trim() || "/kick/stream";
+  if (!channel && !roomId) {
+    setSourceStatus("kick", "ready", "Kick skipped. Enter a channel name, or paste a chatroom ID.");
+    return;
+  }
+  const resolved = new URL(relay, window.location.origin);
+  if (channel) resolved.searchParams.set("channel", channel);
+  if (roomId) resolved.searchParams.set("roomId", roomId);
+  connectSse("kick", resolved.toString());
+}
+
+function connectTwitch() {
+  saveSetupFields();
+  const channel = document.getElementById("twitchChannel").value.trim().toLowerCase();
+  const token = document.getElementById("twitchToken").value.trim();
+  if (!channel || !token) {
+    setSourceStatus("twitch", "error", "Enter a Twitch channel and OAuth token.");
+    return;
+  }
+
+  disconnectSource("twitch");
+  setSourceStatus("twitch", "connecting", `Connecting to #${channel}...`);
+  const ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
+  state.streams.twitch = ws;
+
+  ws.addEventListener("open", () => {
+    ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands");
+    ws.send(`PASS ${token.startsWith("oauth:") ? token : `oauth:${token}`}`);
+    ws.send(`NICK ${channel}`);
+    ws.send(`JOIN #${channel}`);
+  });
+
+  ws.addEventListener("message", (event) => {
+    const raw = event.data;
+    if (raw.startsWith("PING")) {
+      ws.send("PONG :tmi.twitch.tv");
+      return;
+    }
+
+    raw.split("\r\n").filter(Boolean).forEach((line) => {
+      if (line.includes("Login authentication failed") || line.includes("Improperly formatted auth")) {
+        setSourceStatus("twitch", "error", "Twitch auth failed. Check the OAuth token and include chat:read permission.");
+        try { ws.close(); } catch {}
+        return;
+      }
+      if (line.includes("msg_channel_suspended")) {
+        setSourceStatus("twitch", "error", "Twitch refused the channel. Check the channel name.");
+        return;
+      }
+      if (line.includes("001") || line.includes(`JOIN #${channel}`)) {
+        setSourceStatus("twitch", "live", `Connected to Twitch #${channel}. Waiting for chat messages.`);
+      }
+      if (!line.includes("PRIVMSG")) return;
+      const tagStr = line.startsWith("@") ? line.split(" :")[0].slice(1) : "";
+      const tags = {};
+      tagStr.split(";").forEach((tag) => {
+        const [key, value] = tag.split("=");
+        tags[key] = value;
+      });
+      const userMatch = line.match(/:([^!]+)!/);
+      const msgMatch = line.match(/PRIVMSG #[^ ]+ :(.+)/);
+      if (!userMatch || !msgMatch) return;
+      const badge = tags.mod === "1" ? "MOD" : tags.subscriber === "1" ? "SUB" : "";
+      addMessage("twitch", tags["display-name"] || userMatch[1], msgMatch[1], badge);
+    });
+  });
+
+  ws.addEventListener("error", () => setSourceStatus("twitch", "error", "Twitch websocket error. Check token/channel and try again."));
+  ws.addEventListener("close", () => {
+    if (state.status.twitch === "connecting") {
+      setSourceStatus("twitch", "error", "Twitch closed before confirming connection.");
+    } else if (state.status.twitch !== "ready" && state.status.twitch !== "error") {
+      setSourceStatus("twitch", "ready", "Twitch disconnected.");
+    }
+  });
+}
+
+function waitForSettled(source, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const timer = setInterval(() => {
+      const status = state.status[source];
+      if (status === "live" || status === "error" || Date.now() - started > timeoutMs) {
+        clearInterval(timer);
+        if (status === "connecting") setSourceStatus(source, "error", `${sources[source].name} did not confirm in time.`);
+        resolve(state.status[source]);
+      }
+    }, 200);
+  });
+}
+
+async function connectAll() {
+  const jobs = [];
+  const twitchReady = document.getElementById("twitchChannel").value.trim() && document.getElementById("twitchToken").value.trim();
+  const xReady = document.getElementById("xQuery").value.trim() && await hasConfiguredXToken();
+  const kickReady = document.getElementById("kickChannel").value.trim() || document.getElementById("kickRoomId").value.trim();
+
+  if (twitchReady) {
+    connectTwitch();
+    jobs.push(waitForSettled("twitch"));
+  } else {
+    setSourceStatus("twitch", "ready", "Twitch skipped. Enter channel and token to connect it.");
+  }
+
+  if (xReady) {
+    await connectX();
+    jobs.push(waitForSettled("x"));
+  } else {
+    setSourceStatus("x", "ready", "X skipped. Enter a bearer token and query to connect it.");
+  }
+
+  if (kickReady) {
+    connectKick();
+    jobs.push(waitForSettled("kick"));
+  } else {
+    setSourceStatus("kick", "ready", "Kick skipped. Enter a channel name, or paste a chatroom ID.");
+  }
+
+  await Promise.all(jobs);
+  renderSetup();
+}
+
+function launchHub() {
+  saveSetupFields();
+  if (!connectedCount()) return;
+  document.body.classList.remove("setup-active");
+}
+
+tabs.addEventListener("click", (event) => {
+  const tab = event.target.closest("[data-filter]");
+  if (!tab) return;
+  state.filter = tab.dataset.filter;
+  render();
+  feed.scrollTop = 0;
+});
+
+searchInput.addEventListener("input", () => {
+  state.search = searchInput.value;
+  renderFeed();
+  feed.scrollTop = 0;
+});
+
+pauseBtn.addEventListener("click", () => {
+  state.paused = !state.paused;
+  if (!state.paused) feed.scrollTop = feed.scrollHeight;
+  renderStats();
+});
+
+document.getElementById("clearBtn").addEventListener("click", () => {
+  state.messages = [];
+  state.counts = { twitch: 0, x: 0, kick: 0 };
+  state.rateWindow = [];
+  state.peak = 0;
+  render();
+});
+
+document.getElementById("connectBtn").addEventListener("click", () => {
+  document.body.classList.add("setup-active");
+});
+
+document.getElementById("closeDrawer").addEventListener("click", () => {
+  drawer.classList.remove("open");
+  drawer.setAttribute("aria-hidden", "true");
+});
+
+drawer.addEventListener("click", (event) => {
+  if (event.target === drawer) {
+    drawer.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
+  }
+});
+
+document.getElementById("connectX").addEventListener("click", connectX);
+document.getElementById("disconnectX").addEventListener("click", () => disconnectSource("x"));
+document.getElementById("connectKick").addEventListener("click", connectKick);
+document.getElementById("disconnectKick").addEventListener("click", () => disconnectSource("kick"));
+document.getElementById("connectTwitch").addEventListener("click", connectTwitch);
+document.getElementById("disconnectTwitch").addEventListener("click", () => disconnectSource("twitch"));
+document.getElementById("connectAllBtn").addEventListener("click", connectAll);
+document.getElementById("launchHubBtn").addEventListener("click", launchHub);
+
+document.getElementById("composer").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = messageInput.value.trim();
+  if (!text) return;
+  addMessage(sendSource.value, "local", text, "NOTE");
+  messageInput.value = "";
+});
+
+restoreSetupFields();
+bindSetupPersistence();
+renderSendOptions();
+render();
+
+const params = new URLSearchParams(window.location.search);
+if (params.get("overlay") === "1" || window.location.pathname === "/overlay") {
+  document.body.classList.add("overlay-mode");
+  document.body.classList.remove("setup-active");
+}
+
+const initialQuery = params.get("x") || params.get("query");
+if (initialQuery) {
+  document.getElementById("xQuery").value = initialQuery;
+}
+
+if ((params.get("autoconnect") === "1" || params.get("connect") === "x") && initialQuery) {
+  connectX();
+}
+</script>
+</body>
+</html>
