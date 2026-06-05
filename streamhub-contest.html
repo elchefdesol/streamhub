@@ -1432,7 +1432,15 @@ function setSetupMessage(source, message) {
   if (el && message) el.textContent = message;
 }
 
-function setSourceStatus(source, status, message = "", key = connectionKey(source)) {
+function renderStatusPanels() {
+  renderTabs();
+  renderSources();
+  renderStats();
+  renderSetup();
+  renderProfileBar();
+}
+
+function setSourceStatus(source, status, message = "", key = connectionKey(source), options = {}) {
   state.connectionStatus[key] = status;
   state.status[source] = sourceKeys().some((item) => state.connectionStatus[connectionKey(item)] === "live")
     ? state.status[source]
@@ -1443,7 +1451,8 @@ function setSourceStatus(source, status, message = "", key = connectionKey(sourc
       : status;
   }
   setSetupMessage(source, message);
-  render();
+  if (options.renderFeed === false) renderStatusPanels();
+  else render();
 }
 
 function addMessage(source, user, text, badge = "", streamName = activeStreamName(), options = {}) {
@@ -1738,7 +1747,7 @@ function connectSse(source, url, profileId = state.activeProfileId, streamName =
       if (payload.viewerCount !== undefined) setViewerCount(source, profileId, payload.viewerCount, streamName);
       const waitNote = payload.nextPollMs ? ` Next poll in ${Math.round(payload.nextPollMs / 1000)}s.` : "";
       const bridgeNote = payload.bridgeSeen ? " Bridge extension detected." : "";
-      setSourceStatus(source, "live", payload.message || `${sources[source].name} connected for ${streamName}.${bridgeNote}${waitNote}`, key);
+      setSourceStatus(source, "live", payload.message || `${sources[source].name} connected for ${streamName}.${bridgeNote}${waitNote}`, key, { renderFeed: false });
     } catch {
     }
   });
