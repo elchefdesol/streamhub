@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "StreamHub X Livechat Bridge",
+  "version": "0.1.0",
+  "description": "Captures X livechat popout messages and sends them to local StreamHub.",
+  "host_permissions": [
+    "https://x.com/*",
+    "http://127.0.0.1:3000/*",
+    "http://localhost:3000/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://x.com/*/chat*",
+        "https://x.com/*/livechat*",
+        "https://x.com/i/broadcasts/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "StreamHub X Bridge"
+  }
+}

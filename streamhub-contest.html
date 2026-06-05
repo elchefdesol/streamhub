@@ -601,7 +601,8 @@
     gap: 7px;
   }
 
-  .help-links a {
+  .help-links a,
+  .help-links button {
     min-height: 26px;
     border: 1px solid var(--line);
     border-radius: 999px;
@@ -611,9 +612,11 @@
     font-size: .7rem;
     font-weight: 800;
     text-decoration: none;
+    cursor: pointer;
   }
 
-  .help-links a:hover {
+  .help-links a:hover,
+  .help-links button:hover {
     border-color: rgba(24, 214, 163, .5);
     color: var(--accent);
   }
@@ -826,10 +829,10 @@
       <article class="setup-card">
         <div class="setup-card-head">
           <div class="setup-icon" style="color:var(--x); background:rgba(244,246,248,.08)"></div>
-          <div><strong>X</strong><small>Mentions / hashtag feed</small></div>
+          <div><strong>X</strong><small>Posts feed / livechat bridge</small></div>
           <span class="status-chip" id="setupStatus-x">Ready</span>
         </div>
-        <div class="setup-card-body">
+          <div class="setup-card-body">
           <div class="field"><label for="xBearer">Bearer token</label><input id="xBearer" type="password" placeholder="Paste X API bearer token"></div>
           <label class="check-row"><input type="checkbox" id="rememberXBearer"> Remember token on this computer</label>
           <p class="note">Required for X API mode. Leave X disconnected if you only need Twitch and Kick.</p>
@@ -841,7 +844,14 @@
             <a href="https://docs.x.com/x-api/posts/search/integrate/build-a-query" target="_blank" rel="noreferrer">Query syntax</a>
           </div>
           <button class="text-btn primary" type="button" id="connectX">Connect X</button>
-          <p class="note" id="setupMsg-x">Tracks public X posts matching your query. Native X livechat is not available through the public API yet.</p>
+          <p class="note">Tracks public X posts matching your query. This is the official API path.</p>
+          <div class="field"><label for="xLivechatUrl">Experimental livechat URL</label><input id="xLivechatUrl" placeholder="https://x.com/YOUR_HANDLE/chat"></div>
+          <div class="help-links">
+            <button class="chip-btn" type="button" id="openXLivechat">Open X chat</button>
+            <button class="chip-btn" type="button" id="copyXBridgeScript">Copy console fallback</button>
+          </div>
+          <button class="text-btn" type="button" id="connectXLivechat">Connect X Livechat Bridge</button>
+          <p class="note" id="setupMsg-x">For true X livestream chat, load the optional <code>x-livechat-bridge</code> extension, open the X chat popout, then connect this bridge.</p>
         </div>
       </article>
 
@@ -945,7 +955,7 @@
       </section>
       <section class="connection-panel">
         <h2 class="section-title">X Setup</h2>
-        <p class="note">X does not behave like Twitch chat. For this app, X means near-real-time public Posts matching a query, hashtag, mention, or creator rule. Run the local proxy with your bearer token, then connect the X adapter.</p>
+        <p class="note">X has two paths: official API mode for public posts matching a query, and an experimental livechat bridge that reads the logged-in X chat popout through the optional local extension.</p>
       </section>
     </aside>
   </main>
@@ -967,11 +977,11 @@
         <summary>
           <span class="source-dot" style="background: var(--x)"></span>
           <strong>X Posts</strong>
-          <span>Local proxy</span>
+          <span>Proxy / bridge</span>
         </summary>
         <div class="connector-body">
           <button class="text-btn danger" type="button" id="disconnectX">Disconnect X</button>
-          <p class="note">Paste the token here, or start <code>server.mjs</code> with <code>X_BEARER_TOKEN</code>. The local server forwards normalized messages into StreamHub.</p>
+          <p class="note">Use X API mode with a bearer token, or connect the X Livechat Bridge and keep the X chat popout open with the optional extension running.</p>
         </div>
       </details>
 
@@ -1058,6 +1068,7 @@ const setupFieldIds = [
   "twitchChannel",
   "xQuery",
   "xProxy",
+  "xLivechatUrl",
   "kickChannel",
   "kickRoomId",
   "kickRelay",
@@ -1544,6 +1555,60 @@ async function connectX() {
   }
 }
 
+function normalizeXLivechatUrl() {
+  const raw = document.getElementById("xLivechatUrl").value.trim();
+  const fallbackHandle = activeStreamName().replace(/^@/, "").replace(/[^A-Za-z0-9_]/g, "");
+  const value = raw || fallbackHandle;
+  if (!value) return "";
+
+  try {
+    const url = value.startsWith("http") ? new URL(value) : new URL(`https://x.com/${value.replace(/^@/, "")}`);
+    if (!/\/(chat|livechat)\/?$/i.test(url.pathname)) {
+      url.pathname = `${url.pathname.replace(/\/$/, "")}/chat`;
+    } else {
+      url.pathname = url.pathname.replace(/\/livechat\/?$/i, "/chat");
+    }
+    return url.toString();
+  } catch {
+    return `https://x.com/${value.replace(/^@/, "").replace(/^x\.com\//, "").replace(/\/$/, "")}/chat`;
+  }
+}
+
+function openXLivechat() {
+  const url = normalizeXLivechatUrl();
+  if (!url) {
+    setSourceStatus("x", "error", "Enter an X livechat URL or stream name first.");
+    return;
+  }
+  document.getElementById("xLivechatUrl").value = url;
+  saveSetupFields();
+  window.open(url, "_blank", "noopener,noreferrer");
+  setSetupMessage("x", "Opened X chat. Keep that tab open and make sure the StreamHub X bridge extension is loaded.");
+}
+
+async function copyXBridgeScript() {
+  const script = `(() => {
+  const s = document.createElement("script");
+  s.src = "${window.location.origin}/x/livechat/capture.js?ts=" + Date.now();
+  document.documentElement.appendChild(s);
+})();`;
+  try {
+    await navigator.clipboard.writeText(script);
+    setSetupMessage("x", "Copied the console fallback. Open the X chat tab, paste it into DevTools Console, and press Enter.");
+  } catch {
+    setSetupMessage("x", "Could not copy automatically. Use the optional x-livechat-bridge extension instead.");
+  }
+}
+
+function connectXLivechat() {
+  saveSetupFields();
+  const profileId = state.activeProfileId;
+  const streamName = activeStreamName();
+  const url = new URL("/x/livechat/stream", window.location.origin);
+  connectSse("x", url.toString(), profileId, streamName);
+  setSetupMessage("x", "X livechat bridge connected. Open the X chat popout with the extension running, then send a test chat.");
+}
+
 function disconnectSource(source, key = connectionKey(source)) {
   const stream = state.streams[key];
   if (stream) {
@@ -1659,7 +1724,8 @@ async function connectAll() {
   const profileId = state.activeProfileId;
   const jobs = [];
   const twitchReady = document.getElementById("twitchChannel").value.trim() && document.getElementById("twitchToken").value.trim();
-  const xReady = document.getElementById("xQuery").value.trim() && await hasConfiguredXToken();
+  const xApiReady = document.getElementById("xQuery").value.trim() && await hasConfiguredXToken();
+  const xLivechatReady = document.getElementById("xLivechatUrl").value.trim();
   const kickReady = document.getElementById("kickChannel").value.trim() || document.getElementById("kickRoomId").value.trim();
 
   if (twitchReady) {
@@ -1669,11 +1735,14 @@ async function connectAll() {
     setSourceStatus("twitch", "ready", "Twitch skipped. Enter channel and token to connect it.");
   }
 
-  if (xReady) {
+  if (xApiReady) {
     await connectX();
     jobs.push(waitForSettled("x", connectionKey("x", profileId)));
+  } else if (xLivechatReady) {
+    connectXLivechat();
+    jobs.push(waitForSettled("x", connectionKey("x", profileId)));
   } else {
-    setSourceStatus("x", "ready", "X skipped. Enter a bearer token and query to connect it.");
+    setSourceStatus("x", "ready", "X skipped. Enter API details or an X livechat URL to connect it.");
   }
 
   if (kickReady) {
@@ -1738,6 +1807,9 @@ drawer.addEventListener("click", (event) => {
 });
 
 document.getElementById("connectX").addEventListener("click", connectX);
+document.getElementById("connectXLivechat").addEventListener("click", connectXLivechat);
+document.getElementById("openXLivechat").addEventListener("click", openXLivechat);
+document.getElementById("copyXBridgeScript").addEventListener("click", copyXBridgeScript);
 document.getElementById("disconnectX").addEventListener("click", () => disconnectSource("x"));
 document.getElementById("connectKick").addEventListener("click", connectKick);
 document.getElementById("disconnectKick").addEventListener("click", () => disconnectSource("kick"));

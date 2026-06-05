@@ -49,6 +49,7 @@ Useful links:
 - X developer portal: https://developer.x.com/en/portal/dashboard
 - X API credits: https://docs.x.com/x-api/getting-started/pricing
 - X query syntax: https://docs.x.com/x-api/posts/search/integrate/build-a-query
+- X livechat bridge folder: `x-livechat-bridge`
 
 Kick setup:
 
@@ -124,11 +125,40 @@ Important: the OBS overlay receives messages from the main StreamHub app through
 
 ## How X Works
 
-X is not a Twitch-style livestream chat API. StreamHub pulls near-real-time public X posts that match a query, hashtag, mention, or creator rule.
+StreamHub supports X in two ways:
 
-The local Node server calls the X API and forwards normalized messages to the frontend through Server-Sent Events. You can paste the bearer token into the Connect panel, where it is sent only to your local server and kept in memory, or you can store it in `.env`.
+1. Official X API mode for public posts, mentions, hashtags, and creator rules.
+2. Experimental X Livechat Bridge for true livestream chat popouts.
 
-Native X livechat is intentionally not wired as a first-class connector because X does not currently expose a stable public livestream chat API. If X adds one later, StreamHub can add it as another source adapter.
+X API mode calls the X API from the local Node server and forwards normalized messages to the frontend through Server-Sent Events. You can paste the bearer token into the Connect panel, where it is sent only to your local server and kept in memory, or you can store it in `.env`.
+
+X does not currently expose a stable public livestream chat API like Twitch IRC. The livechat bridge works around that by reading the X chat popout page that you are already logged in to and sending visible messages to your local StreamHub server.
+
+### X Livechat Bridge
+
+Install the optional extension:
+
+1. Open `chrome://extensions/` in Chrome, Edge, or Brave.
+2. Turn on `Developer mode`.
+3. Click `Load unpacked`.
+4. Select the `x-livechat-bridge` folder from this repo.
+
+Then use it:
+
+1. Start StreamHub.
+2. Open `http://127.0.0.1:3000`.
+3. In the X card, click `Connect X Livechat Bridge`.
+4. Open your X chat popout, usually:
+
+```text
+https://x.com/YOUR_HANDLE/chat
+```
+
+5. Keep the X chat tab open while streaming.
+
+If you do not want to install the extension, use `Copy console fallback` in the X card, open the X chat popout, paste the script into DevTools Console, and press Enter.
+
+The livechat bridge is experimental because it depends on X's current web page structure. If X changes the chat UI, the bridge may need an update.
 
 ## Collab Streams
 
@@ -150,6 +180,7 @@ Messages in the hub are labeled with both the platform and the stream name:
 
 - `server.mjs`: local app server and X proxy
 - `streamhub-contest.html`: frontend UI and OBS overlay
+- `x-livechat-bridge/`: optional browser extension for experimental X livechat capture
 - `.env.example`: config template
 
 ## Notes

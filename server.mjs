@@ -376,72 +376,6 @@ async function handleHubRecent(req, res) {
   sendJson(res, 200, { messages: hubRecent.slice(-20), clients: hubClients.size });
 }
 
-function livechatCaptureScript() {
-  return `(() => {
-  const endpoint = "http://127.0.0.1:${PORT}/x/livechat/push";
-  const seen = new Set();
-
-  function clean(text) {
-    return String(text || "")
-      .replace(/\\s+/g, " ")
-      .trim();
-  }
-
-  function candidates() {
-    return Array.from(document.querySelectorAll('[data-testid], [role="listitem"], article, div[dir="auto"]'))
-      .map((node) => ({ node, text: clean(node.innerText || node.textContent || "") }))
-      .filter((item) => item.text && item.text.length > 2 && item.text.length < 500);
-  }
-
-  function parseLine(text) {
-    const parts = text.split("\\n").map(clean).filter(Boolean);
-    const flat = clean(text);
-    if (!flat || /^(reply|repost|like|share)$/i.test(flat)) return null;
-
-    let user = "X livechat";
-    let message = flat;
-
-    if (parts.length >= 2) {
-      user = parts[0].replace(/^@/, "");
-      message = parts.slice(1).join(" ");
-    } else {
-      const match = flat.match(/^(@?[A-Za-z0-9_]{2,20})\\s+(.+)$/);
-      if (match) {
-        user = match[1].replace(/^@/, "");
-        message = match[2];
-      }
-    }
-
-    if (!message || message === user || message.length < 2) return null;
-    const id = clean(user + ":" + message);
-    if (seen.has(id)) return null;
-    seen.add(id);
-    if (seen.size > 1000) seen.delete(seen.values().next().value);
-    return { source: "x", user: "@" + user.replace(/^@/, ""), text: message, id };
-  }
-
-  async function flush() {
-    const messages = candidates().map((item) => parseLine(item.text)).filter(Boolean);
-    if (!messages.length) return;
-    try {
-      await fetch(endpoint, {
-        method: "POST",
-        mode: "cors",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages })
-      });
-    } catch (error) {
-      console.warn("StreamHub X livechat bridge could not send messages:", error);
-    }
-  }
-
-  clearInterval(window.__streamHubXLivechatTimer);
-  window.__streamHubXLivechatTimer = setInterval(flush, 1200);
-  flush();
-  console.log("StreamHub X livechat bridge is running. Keep this X livechat tab open.");
-})();`;
-}
-
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
 
@@ -501,11 +435,16 @@ const server = http.createServer((req, res) => {
   }
 
   if (url.pathname === "/x/livechat/capture.js") {
-    res.writeHead(200, {
-      "content-type": "text/javascript; charset=utf-8",
-      "access-control-allow-origin": "*"
-    });
-    res.end(livechatCaptureScript());
+    fs.readFile(path.join(ROOT, "x-livechat-bridge", "content.js"), "utf8")
+      .then((script) => {
+        res.writeHead(200, {
+          "content-type": "text/javascript; charset=utf-8",
+          "cache-control": "no-store",
+          "access-control-allow-origin": "*"
+        });
+        res.end(script);
+      })
+      .catch(() => sendJson(res, 500, { error: "Could not read x-livechat-bridge/content.js" }));
     return;
   }
 
