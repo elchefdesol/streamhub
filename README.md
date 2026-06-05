@@ -35,9 +35,10 @@ http://127.0.0.1:3000
 ```
 
 3. Fill in the platform cards.
-4. Press `Connect All`, or connect platforms one by one.
-5. Confirm the counter shows `1/3`, `2/3`, or `3/3`.
-6. Press `Launch StreamHub`.
+4. Use `+ Add Stream` if you want to merge chats from a cohost or another stream.
+5. Press `Connect Filled Platforms`, or connect platforms one by one.
+6. Confirm the counter shows connected sources, for example `1/3`, `2/3`, or `4/6`.
+7. Press `Launch StreamHub`.
 
 Twitch needs a chat OAuth token with `chat:read`. The channel field is the Twitch channel you want to join.
 
@@ -55,7 +56,7 @@ Kick setup:
 2. Leave Proxy URL as `/kick/stream`.
 3. Press `Connect Kick`.
 
-If Kick blocks the automatic channel lookup, paste the channel's chatroom ID into `Chatroom ID optional` and try again. You can usually find it by opening:
+If Kick blocks the automatic channel lookup, paste the channel's chatroom ID into `Chatroom ID fallback` and try again. You can usually find it by opening:
 
 ```text
 https://kick.com/api/v2/channels/CHANNEL_NAME
@@ -81,20 +82,16 @@ X_BEARER_TOKEN=your_x_bearer_token_here
 
 ## OBS / Streamlabs
 
-Add a Browser Source with this URL:
+First connect platforms in the main app:
 
 ```text
-http://127.0.0.1:3000/overlay?overlay=1&x=%23YourStreamTag&autoconnect=1
+http://127.0.0.1:3000
 ```
 
-Replace `%23YourStreamTag` with your hashtag. `%23` is `#` in a URL.
-
-Examples:
+Then add a Browser Source with this URL:
 
 ```text
-http://127.0.0.1:3000/overlay?overlay=1&x=%23MarketBubble&autoconnect=1
-http://127.0.0.1:3000/overlay?overlay=1&x=%40MarketBubble&autoconnect=1
-http://127.0.0.1:3000/overlay?overlay=1&x=%23MarketBubble%20OR%20%40MarketBubble&autoconnect=1
+http://127.0.0.1:3000/overlay?overlay=1
 ```
 
 Suggested Browser Source size: `1280 x 720`.
@@ -106,6 +103,22 @@ X is not a Twitch-style livestream chat API. StreamHub pulls near-real-time publ
 The local Node server calls the X API and forwards normalized messages to the frontend through Server-Sent Events. You can paste the bearer token into the Connect panel, where it is sent only to your local server and kept in memory, or you can store it in `.env`.
 
 Native X livechat is intentionally not wired as a first-class connector because X does not currently expose a stable public livestream chat API. If X adds one later, StreamHub can add it as another source adapter.
+
+## Collab Streams
+
+StreamHub supports multiple stream slots for co-streams and collabs.
+
+1. Click `+ Add Stream`.
+2. Name the stream slot, for example `elchefdesol`, `cohost`, or `team red`.
+3. Fill in that streamer's Twitch, X, and Kick fields.
+4. Connect the slot.
+
+Messages in the hub are labeled with both the platform and the stream name:
+
+```text
+[Twitch] [elchefdesol] viewer123: let's go
+[Kick] [cohost] fan88: chat is moving
+```
 
 ## Files
 

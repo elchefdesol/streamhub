@@ -131,6 +131,31 @@
     align-content: start;
   }
 
+  .stream-profile-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .profile-tab {
+    min-height: 34px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(17, 20, 26, .9);
+    color: var(--muted);
+    padding: 0 10px;
+    cursor: pointer;
+    font-weight: 800;
+    font-size: .78rem;
+  }
+
+  .profile-tab.active {
+    color: var(--text);
+    border-color: rgba(24, 214, 163, .55);
+    background: var(--panel-3);
+  }
+
   .setup-card {
     border: 1px solid var(--line);
     border-radius: 8px;
@@ -347,6 +372,9 @@
     opacity: .45;
     cursor: not-allowed;
     transform: none;
+    background: var(--panel-2);
+    color: var(--muted);
+    border-color: var(--line);
   }
 
   .toolbar {
@@ -510,6 +538,7 @@
   }
 
   .badge { background: rgba(247, 185, 85, .13); color: #ffd88c; }
+  .stream-badge { background: rgba(24, 214, 163, .12); color: #94f1d7; }
   .text { margin-top: 3px; color: var(--text); line-height: 1.38; font-size: .94rem; word-break: break-word; }
   .time { color: var(--muted); font-size: .72rem; font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 2px; }
 
@@ -708,6 +737,19 @@
     </div>
 
     <div class="setup-grid">
+      <article class="setup-card" style="grid-column: 1 / -1;">
+        <div class="setup-card-head">
+          <div class="setup-icon" style="color:var(--accent); background:rgba(24,214,163,.12)"></div>
+          <div><strong>Stream Slot</strong><small>Add slots for cohosts, collabs, or multiple channels</small></div>
+          <span class="status-chip" id="activeStreamLabel">Stream 1</span>
+        </div>
+        <div class="setup-card-body">
+          <div class="stream-profile-bar" id="streamProfileBar"></div>
+          <div class="field"><label for="streamName">Stream name</label><input id="streamName" value="elchefdesol" placeholder="elchefdesol, cohost, team red"></div>
+          <p class="note">Messages from this slot will be labeled with the stream name in the hub.</p>
+        </div>
+      </article>
+
       <article class="setup-card">
         <div class="setup-card-head">
           <div class="setup-icon" style="color:var(--twitch); background:rgba(145,70,255,.14)"></div>
@@ -736,6 +778,7 @@
         <div class="setup-card-body">
           <div class="field"><label for="xBearer">Bearer token</label><input id="xBearer" type="password" placeholder="Paste X API bearer token"></div>
           <label class="check-row"><input type="checkbox" id="rememberXBearer"> Remember token on this computer</label>
+          <p class="note">Required for X API mode. Leave X disconnected if you only need Twitch and Kick.</p>
           <div class="field"><label for="xQuery">Query</label><input id="xQuery" value="#elchefdesol OR @elchefdesol" placeholder="#yourstream OR @yourhandle"></div>
           <div class="field"><label for="xProxy">Proxy URL</label><input id="xProxy" value="/x/stream" placeholder="/x/stream"></div>
           <div class="help-links">
@@ -758,6 +801,7 @@
           <div class="field"><label for="kickChannel">Channel</label><input id="kickChannel" placeholder="channelname"></div>
           <div class="field"><label for="kickRoomId">Chatroom ID fallback</label><input id="kickRoomId" placeholder="Use if channel lookup fails"></div>
           <div class="field"><label for="kickRelay">Proxy URL</label><input id="kickRelay" value="/kick/stream" placeholder="/kick/stream"></div>
+          <label class="check-row"><input type="checkbox" id="rememberKickSettings" checked> Remember Kick settings on this computer</label>
           <div class="help-links">
             <a href="https://kick.com/" target="_blank" rel="noreferrer">Open Kick</a>
             <a href="https://kick.com/api/v2/channels/elchefdesol" target="_blank" rel="noreferrer">Example chatroom JSON</a>
@@ -769,9 +813,10 @@
     </div>
 
     <div class="setup-actions">
-      <p class="note" id="setupSummary">Connect at least one platform to launch the hub. Use Connect All to try every card with info filled in.</p>
+      <p class="note" id="setupSummary">Connect at least one platform to launch the hub. Use Connect Filled Platforms to try every card with info filled in.</p>
       <div class="header-actions">
-        <button class="text-btn" type="button" id="connectAllBtn">Connect All</button>
+        <button class="text-btn" type="button" id="addStreamBtn">+ Add Stream</button>
+        <button class="text-btn" type="button" id="connectAllBtn">Connect Filled Platforms</button>
         <button class="text-btn primary" type="button" id="launchHubBtn" disabled>Launch StreamHub</button>
       </div>
     </div>
@@ -921,20 +966,24 @@ const sources = {
   }
 };
 
-document.querySelector(".setup-card:nth-child(1) .setup-icon").innerHTML = sources.twitch.icon;
-document.querySelector(".setup-card:nth-child(2) .setup-icon").innerHTML = sources.x.icon;
-document.querySelector(".setup-card:nth-child(3) .setup-icon").innerHTML = sources.kick.icon;
+document.querySelectorAll(".setup-icon")[0].innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+document.querySelectorAll(".setup-icon")[1].innerHTML = sources.twitch.icon;
+document.querySelectorAll(".setup-icon")[2].innerHTML = sources.x.icon;
+document.querySelectorAll(".setup-icon")[3].innerHTML = sources.kick.icon;
 
 const state = {
   messages: [],
   counts: { twitch: 0, x: 0, kick: 0 },
   status: { twitch: "ready", x: "ready", kick: "ready" },
+  profiles: [{ id: "stream-1", name: "elchefdesol", fields: {} }],
+  activeProfileId: "stream-1",
+  connectionStatus: {},
   filter: "all",
   search: "",
   paused: false,
   rateWindow: [],
   peak: 0,
-  streams: { x: null, kick: null, twitch: null }
+  streams: {}
 };
 
 const feed = document.getElementById("feed");
@@ -946,12 +995,14 @@ const sendSource = document.getElementById("sendSource");
 const messageInput = document.getElementById("messageInput");
 const storageKey = "streamhub.setup.v1";
 const setupFieldIds = [
+  "streamName",
   "twitchChannel",
   "xQuery",
   "xProxy",
   "kickChannel",
   "kickRoomId",
-  "kickRelay"
+  "kickRelay",
+  "rememberKickSettings"
 ];
 const secretFieldIds = [
   ["twitchToken", "rememberTwitchToken"],
@@ -991,7 +1042,7 @@ function saveSetupFields() {
   const data = {};
   setupFieldIds.forEach((id) => {
     const el = document.getElementById(id);
-    if (el) data[id] = el.value;
+    if (el) data[id] = el.type === "checkbox" ? Boolean(el.checked) : el.value;
   });
 
   secretFieldIds.forEach(([fieldId, checkboxId]) => {
@@ -1001,14 +1052,26 @@ function saveSetupFields() {
     data[fieldId] = checkbox?.checked ? field?.value || "" : "";
   });
 
-  writeStoredSetup(data);
+  const profile = activeProfile();
+  profile.name = data.streamName || profile.name;
+  profile.fields = { ...profile.fields, ...data };
+  writeStoredSetup({ ...data, profiles: state.profiles, activeProfileId: state.activeProfileId });
 }
 
 function restoreSetupFields() {
   const data = readStoredSetup();
+  if (Array.isArray(data.profiles) && data.profiles.length) {
+    state.profiles = data.profiles;
+    state.activeProfileId = data.activeProfileId || state.profiles[0].id;
+  }
+  const profileFields = activeProfile().fields || {};
   setupFieldIds.forEach((id) => {
     const el = document.getElementById(id);
-    if (el && data[id] !== undefined) el.value = data[id];
+    if (!el) return;
+    const value = profileFields[id] !== undefined ? profileFields[id] : data[id];
+    if (value === undefined) return;
+    if (el.type === "checkbox") el.checked = Boolean(value);
+    else el.value = value;
   });
 
   secretFieldIds.forEach(([fieldId, checkboxId]) => {
@@ -1029,7 +1092,69 @@ function bindSetupPersistence() {
 }
 
 function connectedCount() {
-  return sourceKeys().filter((key) => state.status[key] === "live").length;
+  return Object.values(state.connectionStatus).filter((status) => status === "live").length;
+}
+
+function loadProfileFields(profileId) {
+  const profile = state.profiles.find((item) => item.id === profileId);
+  if (!profile) return;
+  state.activeProfileId = profileId;
+  const fields = profile.fields || {};
+  setupFieldIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === "checkbox") el.checked = Boolean(fields[id]);
+    else if (id === "streamName") el.value = profile.name || "";
+    else el.value = fields[id] || "";
+  });
+  render();
+}
+
+function renderProfileBar() {
+  const bar = document.getElementById("streamProfileBar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  state.profiles.forEach((profile, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `profile-tab ${profile.id === state.activeProfileId ? "active" : ""}`;
+    button.textContent = profile.name || `Stream ${index + 1}`;
+    button.addEventListener("click", () => {
+      saveSetupFields();
+      loadProfileFields(profile.id);
+    });
+    bar.appendChild(button);
+  });
+  document.getElementById("activeStreamLabel").textContent = activeProfile().name || "Stream";
+}
+
+function addStreamProfile() {
+  saveSetupFields();
+  const next = state.profiles.length + 1;
+  const profile = {
+    id: `stream-${Date.now()}`,
+    name: `Stream ${next}`,
+    fields: {
+      streamName: `Stream ${next}`,
+      xProxy: "/x/stream",
+      kickRelay: "/kick/stream"
+    }
+  };
+  state.profiles.push(profile);
+  loadProfileFields(profile.id);
+  writeStoredSetup({ profiles: state.profiles, activeProfileId: state.activeProfileId });
+}
+
+function activeProfile() {
+  return state.profiles.find((profile) => profile.id === state.activeProfileId) || state.profiles[0];
+}
+
+function activeStreamName() {
+  return document.getElementById("streamName").value.trim() || activeProfile().name || "Stream";
+}
+
+function connectionKey(source, profileId = state.activeProfileId) {
+  return `${profileId}:${source}`;
 }
 
 function setSetupMessage(source, message) {
@@ -1037,13 +1162,21 @@ function setSetupMessage(source, message) {
   if (el && message) el.textContent = message;
 }
 
-function setSourceStatus(source, status, message = "") {
-  state.status[source] = status;
+function setSourceStatus(source, status, message = "", key = connectionKey(source)) {
+  state.connectionStatus[key] = status;
+  state.status[source] = sourceKeys().some((item) => state.connectionStatus[connectionKey(item)] === "live")
+    ? state.status[source]
+    : status;
+  if (sourceKeys().includes(source)) {
+    state.status[source] = Object.entries(state.connectionStatus).some(([itemKey, itemStatus]) => itemKey.endsWith(`:${source}`) && itemStatus === "live")
+      ? "live"
+      : status;
+  }
   setSetupMessage(source, message);
   render();
 }
 
-function addMessage(source, user, text, badge = "") {
+function addMessage(source, user, text, badge = "", streamName = activeStreamName()) {
   if (!sources[source]) return;
   const msg = {
     id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
@@ -1051,6 +1184,7 @@ function addMessage(source, user, text, badge = "") {
     user: user || "unknown",
     text: text || "",
     badge,
+    streamName,
     time: nowTime(),
     ts: Date.now()
   };
@@ -1081,6 +1215,7 @@ function visibleMessages() {
 function messageNode(msg) {
   const src = sources[msg.source];
   const badge = msg.badge ? `<span class="badge">${escapeHtml(msg.badge)}</span>` : "";
+  const streamBadge = msg.streamName ? `<span class="badge stream-badge">${escapeHtml(msg.streamName)}</span>` : "";
   const node = document.createElement("article");
   node.className = "msg";
   node.dataset.source = msg.source;
@@ -1090,6 +1225,7 @@ function messageNode(msg) {
       <div class="msg-meta">
         <span class="user">${escapeHtml(msg.user)}</span>
         <span class="source-label">${src.name}</span>
+        ${streamBadge}
         ${badge}
       </div>
       <div class="text">${escapeHtml(msg.text)}</div>
@@ -1172,11 +1308,11 @@ function renderStats() {
 
 function renderSetup() {
   const live = connectedCount();
-  document.getElementById("setupCount").textContent = `${live}/3`;
+  document.getElementById("setupCount").textContent = `${live}/${state.profiles.length * 3}`;
   document.getElementById("launchHubBtn").disabled = live === 0;
   document.getElementById("setupSummary").textContent = live
-    ? `${live}/3 connected. Launch StreamHub when you are ready, or keep connecting more platforms.`
-    : "Connect at least one platform to launch the hub. Use Connect All to try every card with info filled in.";
+    ? `${live}/${state.profiles.length * 3} connected. Launch StreamHub when you are ready, or keep connecting more platforms.`
+    : "Connect at least one platform to launch the hub. Use Connect Filled Platforms to try every card with info filled in.";
 
   sourceKeys().forEach((key) => {
     const chip = document.getElementById(`setupStatus-${key}`);
@@ -1202,24 +1338,26 @@ function render() {
   renderSources();
   renderStats();
   renderSetup();
+  renderProfileBar();
 }
 
-function connectSse(source, url) {
-  disconnectSource(source);
-  setSourceStatus(source, "connecting", `Connecting ${sources[source].name}...`);
+function connectSse(source, url, profileId = state.activeProfileId, streamName = activeStreamName()) {
+  const key = connectionKey(source, profileId);
+  disconnectSource(source, key);
+  setSourceStatus(source, "connecting", `Connecting ${sources[source].name} for ${streamName}...`, key);
   const stream = new EventSource(url);
-  state.streams[source] = stream;
+  state.streams[key] = stream;
 
   stream.addEventListener("open", () => {
-    setSourceStatus(source, "live", `${sources[source].name} connected.`);
+    setSourceStatus(source, "live", `${sources[source].name} connected for ${streamName}.`, key);
   });
 
   stream.addEventListener("message", (event) => {
     try {
       const payload = JSON.parse(event.data);
-      addMessage(payload.source || source, payload.user || payload.username, payload.text, payload.badge || "");
+      addMessage(payload.source || source, payload.user || payload.username, payload.text, payload.badge || "", payload.streamName || streamName);
     } catch (error) {
-      addMessage(source, "system", event.data, "RAW");
+      addMessage(source, "system", event.data, "RAW", streamName);
     }
   });
 
@@ -1227,17 +1365,17 @@ function connectSse(source, url) {
     if (event.data) {
       try {
         const payload = JSON.parse(event.data);
-        setSourceStatus(source, "error", payload.error || `${sources[source].name} connection failed.`);
+        setSourceStatus(source, "error", payload.error || `${sources[source].name} connection failed.`, key);
         return;
       } catch {
       }
     }
-    setSourceStatus(source, "error", `${sources[source].name} connection failed. Check credentials or relay URL.`);
+    setSourceStatus(source, "error", `${sources[source].name} connection failed. Check credentials or relay URL.`, key);
   });
 
   stream.addEventListener("error", () => {
     if (state.status[source] !== "error") {
-      setSourceStatus(source, "error", `${sources[source].name} connection failed. Check credentials or relay URL.`);
+      setSourceStatus(source, "error", `${sources[source].name} connection failed. Check credentials or relay URL.`, key);
     }
   });
 }
@@ -1271,67 +1409,74 @@ async function hasConfiguredXToken() {
 }
 
 async function connectX() {
+  saveSetupFields();
+  const profileId = state.activeProfileId;
+  const streamName = activeStreamName();
+  const key = connectionKey("x", profileId);
   const query = document.getElementById("xQuery").value.trim();
   const base = document.getElementById("xProxy").value.trim();
   if (!query || !base) {
-    setSourceStatus("x", "error", "Enter an X query and proxy URL.");
+    setSourceStatus("x", "error", "Enter an X query and proxy URL.", key);
     return;
   }
   try {
     if (!await hasConfiguredXToken()) {
-      setSourceStatus("x", "error", "Paste your X Bearer Token first, then click Connect X.");
+      setSourceStatus("x", "error", "Paste your X Bearer Token first, then click Connect X.", key);
       return;
     }
     await configureXToken();
     const resolved = new URL(base, window.location.origin);
     resolved.searchParams.set("query", query);
-    connectSse("x", resolved.toString());
+    connectSse("x", resolved.toString(), profileId, streamName);
   } catch (error) {
-    setSourceStatus("x", "error", error.message);
-    addMessage("x", "system", error.message, "ERROR");
+    setSourceStatus("x", "error", error.message, key);
+    addMessage("x", "system", error.message, "ERROR", streamName);
   }
 }
 
-function disconnectSource(source) {
-  const stream = state.streams[source];
+function disconnectSource(source, key = connectionKey(source)) {
+  const stream = state.streams[key];
   if (stream) {
     if (typeof stream.close === "function") stream.close();
-    state.streams[source] = null;
+    state.streams[key] = null;
   }
-  if (source === "twitch" && state.streams.twitch) {
-    try { state.streams.twitch.close(); } catch {}
-    state.streams.twitch = null;
-  }
-  setSourceStatus(source, "ready", `${sources[source].name} disconnected.`);
+  setSourceStatus(source, "ready", `${sources[source].name} disconnected.`, key);
 }
 
 function connectKick() {
+  saveSetupFields();
+  const profileId = state.activeProfileId;
+  const streamName = activeStreamName();
+  const key = connectionKey("kick", profileId);
   const channel = document.getElementById("kickChannel").value.trim().replace(/^@/, "");
   const roomId = document.getElementById("kickRoomId").value.trim();
   const relay = document.getElementById("kickRelay").value.trim() || "/kick/stream";
   if (!channel && !roomId) {
-    setSourceStatus("kick", "ready", "Kick skipped. Enter a channel name, or paste a chatroom ID.");
+    setSourceStatus("kick", "ready", "Kick skipped. Enter a channel name, or paste a chatroom ID.", key);
     return;
   }
   const resolved = new URL(relay, window.location.origin);
   if (channel) resolved.searchParams.set("channel", channel);
   if (roomId) resolved.searchParams.set("roomId", roomId);
-  connectSse("kick", resolved.toString());
+  connectSse("kick", resolved.toString(), profileId, streamName);
 }
 
 function connectTwitch() {
   saveSetupFields();
+  const profileId = state.activeProfileId;
+  const streamName = activeStreamName();
+  const key = connectionKey("twitch", profileId);
   const channel = document.getElementById("twitchChannel").value.trim().toLowerCase();
   const token = document.getElementById("twitchToken").value.trim();
   if (!channel || !token) {
-    setSourceStatus("twitch", "error", "Enter a Twitch channel and OAuth token.");
+    setSourceStatus("twitch", "error", "Enter a Twitch channel and OAuth token.", key);
     return;
   }
 
-  disconnectSource("twitch");
-  setSourceStatus("twitch", "connecting", `Connecting to #${channel}...`);
+  disconnectSource("twitch", key);
+  setSourceStatus("twitch", "connecting", `Connecting ${streamName} to Twitch #${channel}...`, key);
   const ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
-  state.streams.twitch = ws;
+  state.streams[key] = ws;
 
   ws.addEventListener("open", () => {
     ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands");
@@ -1349,16 +1494,16 @@ function connectTwitch() {
 
     raw.split("\r\n").filter(Boolean).forEach((line) => {
       if (line.includes("Login authentication failed") || line.includes("Improperly formatted auth")) {
-        setSourceStatus("twitch", "error", "Twitch auth failed. Check the OAuth token and include chat:read permission.");
+        setSourceStatus("twitch", "error", "Twitch auth failed. Check the OAuth token and include chat:read permission.", key);
         try { ws.close(); } catch {}
         return;
       }
       if (line.includes("msg_channel_suspended")) {
-        setSourceStatus("twitch", "error", "Twitch refused the channel. Check the channel name.");
+        setSourceStatus("twitch", "error", "Twitch refused the channel. Check the channel name.", key);
         return;
       }
       if (line.includes("001") || line.includes(`JOIN #${channel}`)) {
-        setSourceStatus("twitch", "live", `Connected to Twitch #${channel}. Waiting for chat messages.`);
+        setSourceStatus("twitch", "live", `Connected ${streamName} to Twitch #${channel}. Waiting for chat messages.`, key);
       }
       if (!line.includes("PRIVMSG")) return;
       const tagStr = line.startsWith("@") ? line.split(" :")[0].slice(1) : "";
@@ -1371,35 +1516,37 @@ function connectTwitch() {
       const msgMatch = line.match(/PRIVMSG #[^ ]+ :(.+)/);
       if (!userMatch || !msgMatch) return;
       const badge = tags.mod === "1" ? "MOD" : tags.subscriber === "1" ? "SUB" : "";
-      addMessage("twitch", tags["display-name"] || userMatch[1], msgMatch[1], badge);
+      addMessage("twitch", tags["display-name"] || userMatch[1], msgMatch[1], badge, streamName);
     });
   });
 
-  ws.addEventListener("error", () => setSourceStatus("twitch", "error", "Twitch websocket error. Check token/channel and try again."));
+  ws.addEventListener("error", () => setSourceStatus("twitch", "error", "Twitch websocket error. Check token/channel and try again.", key));
   ws.addEventListener("close", () => {
     if (state.status.twitch === "connecting") {
-      setSourceStatus("twitch", "error", "Twitch closed before confirming connection.");
+      setSourceStatus("twitch", "error", "Twitch closed before confirming connection.", key);
     } else if (state.status.twitch !== "ready" && state.status.twitch !== "error") {
-      setSourceStatus("twitch", "ready", "Twitch disconnected.");
+      setSourceStatus("twitch", "ready", "Twitch disconnected.", key);
     }
   });
 }
 
-function waitForSettled(source, timeoutMs = 8000) {
+function waitForSettled(source, key = connectionKey(source), timeoutMs = 8000) {
   return new Promise((resolve) => {
     const started = Date.now();
     const timer = setInterval(() => {
-      const status = state.status[source];
+      const status = state.connectionStatus[key] || state.status[source];
       if (status === "live" || status === "error" || Date.now() - started > timeoutMs) {
         clearInterval(timer);
-        if (status === "connecting") setSourceStatus(source, "error", `${sources[source].name} did not confirm in time.`);
-        resolve(state.status[source]);
+        if (status === "connecting") setSourceStatus(source, "error", `${sources[source].name} did not confirm in time.`, key);
+        resolve(state.connectionStatus[key] || state.status[source]);
       }
     }, 200);
   });
 }
 
 async function connectAll() {
+  saveSetupFields();
+  const profileId = state.activeProfileId;
   const jobs = [];
   const twitchReady = document.getElementById("twitchChannel").value.trim() && document.getElementById("twitchToken").value.trim();
   const xReady = document.getElementById("xQuery").value.trim() && await hasConfiguredXToken();
@@ -1407,21 +1554,21 @@ async function connectAll() {
 
   if (twitchReady) {
     connectTwitch();
-    jobs.push(waitForSettled("twitch"));
+    jobs.push(waitForSettled("twitch", connectionKey("twitch", profileId)));
   } else {
     setSourceStatus("twitch", "ready", "Twitch skipped. Enter channel and token to connect it.");
   }
 
   if (xReady) {
     await connectX();
-    jobs.push(waitForSettled("x"));
+    jobs.push(waitForSettled("x", connectionKey("x", profileId)));
   } else {
     setSourceStatus("x", "ready", "X skipped. Enter a bearer token and query to connect it.");
   }
 
   if (kickReady) {
     connectKick();
-    jobs.push(waitForSettled("kick"));
+    jobs.push(waitForSettled("kick", connectionKey("kick", profileId)));
   } else {
     setSourceStatus("kick", "ready", "Kick skipped. Enter a channel name, or paste a chatroom ID.");
   }
@@ -1486,6 +1633,7 @@ document.getElementById("connectKick").addEventListener("click", connectKick);
 document.getElementById("disconnectKick").addEventListener("click", () => disconnectSource("kick"));
 document.getElementById("connectTwitch").addEventListener("click", connectTwitch);
 document.getElementById("disconnectTwitch").addEventListener("click", () => disconnectSource("twitch"));
+document.getElementById("addStreamBtn").addEventListener("click", addStreamProfile);
 document.getElementById("connectAllBtn").addEventListener("click", connectAll);
 document.getElementById("launchHubBtn").addEventListener("click", launchHub);
 
