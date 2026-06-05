@@ -85,29 +85,33 @@ X_BEARER_TOKEN=your_x_bearer_token_here
 StreamHub uses two local browser pages while you stream:
 
 - Main app / dock: connects Twitch, X, and Kick.
-- Overlay: transparent chat bubbles for the actual stream scene.
+- Overlay: transparent username + message bubbles for the actual stream scene.
 
-First open the main app, connect your platforms, and leave it open:
+### OBS Dock
+
+Add this URL as a custom browser dock if you want the full StreamHub controls inside OBS:
 
 ```text
 http://127.0.0.1:3000
 ```
 
-Then add a Browser Source with this URL:
+Connect your platforms here and keep this page open while streaming.
+
+### Stream Overlay
+
+Add this URL as a Browser Source in your scene:
 
 ```text
-http://127.0.0.1:3000/overlay?overlay=1
+http://127.0.0.1:3000/overlay?overlay=1&duration=6&max=4
 ```
 
 Suggested Browser Source size: `1280 x 720`.
 
-The overlay is transparent and only shows recent chat messages. Messages disappear automatically after a few seconds. If there are no new messages, the overlay will look blank on purpose.
-
-Important: the OBS overlay receives messages from the main StreamHub app through the local Node server. Keep the main app connected in your browser or OBS dock while the overlay is in your scene.
+The overlay is transparent and only shows recent chat messages. It hides platform badges, timestamps, and the dashboard card background so it can sit cleanly on top of a stream. Messages disappear automatically after a few seconds. If there are no new messages, the overlay will look blank on purpose.
 
 If OBS keeps showing an old blank page after you update StreamHub, open the Browser Source properties and click `Refresh cache of current page`, or temporarily add `&v=2` to the overlay URL.
 
-Optional overlay settings:
+Overlay settings:
 
 ```text
 http://127.0.0.1:3000/overlay?overlay=1&duration=6&max=4
@@ -115,6 +119,8 @@ http://127.0.0.1:3000/overlay?overlay=1&duration=6&max=4
 
 - `duration=6` keeps each message visible for about 6 seconds.
 - `max=4` shows at most 4 recent messages.
+
+Important: the OBS overlay receives messages from the main StreamHub app through the local Node server. Keep the main app connected in your browser or OBS dock while the overlay is in your scene.
 
 ## How X Works
 
