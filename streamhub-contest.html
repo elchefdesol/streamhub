@@ -591,6 +591,31 @@
   .source-row small { color: var(--muted); font-size: .7rem; }
   .source-row em { color: var(--soft); font-style: normal; font-size: .78rem; font-variant-numeric: tabular-nums; }
 
+  .mini-title {
+    margin: 14px 0 7px;
+    color: var(--muted);
+    font-size: .68rem;
+    font-weight: 900;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .metric-list { display: grid; gap: 7px; }
+  .metric-row {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    padding: 9px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .metric-row strong { display: block; font-size: .8rem; overflow-wrap: anywhere; }
+  .metric-row small { display: block; color: var(--muted); font-size: .68rem; margin-top: 2px; }
+  .metric-row em { color: var(--soft); font-style: normal; font-size: .74rem; text-align: right; font-variant-numeric: tabular-nums; }
+
   .connection-panel { min-height: 0; overflow-y: auto; padding: 14px; }
   .note { color: var(--muted); font-size: .72rem; line-height: 1.38; }
   .note code { color: var(--soft); }
@@ -946,8 +971,12 @@
           <div class="stat"><b id="statTotal">0</b><span>Total</span></div>
           <div class="stat"><b id="statRate">0</b><span>Last min</span></div>
           <div class="stat"><b id="statPeak">0</b><span>Peak burst</span></div>
-          <div class="stat"><b id="statSources">0</b><span>Live sources</span></div>
+          <div class="stat"><b id="statViewers">--</b><span>Viewers</span></div>
         </div>
+        <h3 class="mini-title">By platform</h3>
+        <div class="metric-list" id="activityByPlatform"></div>
+        <h3 class="mini-title">By stream</h3>
+        <div class="metric-list" id="activityByStream"></div>
       </section>
       <section class="panel-section">
         <h2 class="section-title">Sources</h2>
@@ -1047,7 +1076,9 @@ const state = {
   paused: false,
   rateWindow: [],
   peak: 0,
-  streams: {}
+  streams: {},
+  viewerCounts: {},
+  viewerTimers: {}
 };
 
 const feed = document.getElementById("feed");
@@ -1227,6 +1258,35 @@ function connectionKey(source, profileId = state.activeProfileId) {
   return `${profileId}:${source}`;
 }
 
+function formatNumber(value) {
+  if (!Number.isFinite(value)) return "--";
+  return new Intl.NumberFormat().format(value);
+}
+
+function viewerCountForKey(key) {
+  const count = state.viewerCounts[key]?.count;
+  return Number.isFinite(count) ? count : null;
+}
+
+function setViewerCount(source, profileId, count, label = "") {
+  const key = connectionKey(source, profileId);
+  state.viewerCounts[key] = {
+    source,
+    profileId,
+    count: Number.isFinite(Number(count)) ? Number(count) : null,
+    label,
+    updatedAt: Date.now()
+  };
+  renderStats();
+}
+
+function clearViewerTimer(key) {
+  if (state.viewerTimers[key]) {
+    clearInterval(state.viewerTimers[key]);
+    delete state.viewerTimers[key];
+  }
+}
+
 function setSetupMessage(source, message) {
   const el = document.getElementById(`setupMsg-${source}`);
   if (el && message) el.textContent = message;
@@ -1249,6 +1309,8 @@ function setSourceStatus(source, status, message = "", key = connectionKey(sourc
 function addMessage(source, user, text, badge = "", streamName = activeStreamName(), options = {}) {
   if (!sources[source]) return;
   if (options.id && state.messages.some((message) => message.id === options.id)) return;
+  const ts = Number.isFinite(options.ts) ? options.ts : Date.now();
+  const profileId = options.profileId || state.activeProfileId;
   const msg = {
     id: options.id || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
     source,
@@ -1256,8 +1318,9 @@ function addMessage(source, user, text, badge = "", streamName = activeStreamNam
     text: text || "",
     badge,
     streamName,
-    time: nowTime(),
-    ts: Date.now()
+    profileId,
+    time: new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+    ts
   };
 
   state.messages.push(msg);
@@ -1279,7 +1342,7 @@ function publishHubMessage(msg) {
 }
 
 function ingestHubMessage(msg) {
-  addMessage(msg.source, msg.user, msg.text, msg.badge || "", msg.streamName || "", { fromHub: true, id: msg.id });
+  addMessage(msg.source, msg.user, msg.text, msg.badge || "", msg.streamName || "", { fromHub: true, id: msg.id, ts: msg.ts, profileId: msg.profileId });
 }
 
 async function pollHubRecent() {
@@ -1400,31 +1463,85 @@ function renderSources() {
   sourceKeys().forEach((key) => {
     const src = sources[key];
     const status = state.status[key];
+    const viewerValues = Object.entries(state.viewerCounts)
+      .filter(([itemKey, item]) => item.source === key && state.connectionStatus[itemKey] === "live" && Number.isFinite(item.count))
+      .map(([, item]) => item.count);
+    const viewerTotal = viewerValues.reduce((sum, count) => sum + count, 0);
     const row = document.createElement("div");
     row.className = `source-row ${status === "live" ? "live" : ""} ${status === "error" ? "error" : ""}`;
     row.innerHTML = `
       <span class="source-dot" style="${status === "ready" ? `background:${src.color}; opacity:.38` : ""}"></span>
-      <span><strong>${src.name}</strong><small>${escapeHtml(status)}</small></span>
+      <span><strong>${src.name}</strong><small>${escapeHtml(status)} · viewers ${viewerValues.length ? formatNumber(viewerTotal) : "--"}</small></span>
       <em>${state.counts[key]}</em>
     `;
     list.appendChild(row);
   });
 }
 
+function renderActivityBreakdowns() {
+  const platformList = document.getElementById("activityByPlatform");
+  const streamList = document.getElementById("activityByStream");
+  if (!platformList || !streamList) return;
+
+  platformList.innerHTML = "";
+  sourceKeys().forEach((source) => {
+    const viewerValues = Object.entries(state.viewerCounts)
+      .filter(([key, item]) => item.source === source && state.connectionStatus[key] === "live" && Number.isFinite(item.count))
+      .map(([, item]) => item.count);
+    const viewerTotal = viewerValues.reduce((sum, count) => sum + count, 0);
+    const count = state.messages.filter((msg) => msg.source === source).length;
+    const row = document.createElement("div");
+    row.className = "metric-row";
+    row.innerHTML = `
+      <span><strong>${sources[source].name}</strong><small>${count} messages · ${viewerValues.length ? formatNumber(viewerTotal) : "--"} viewers</small></span>
+      <em>${state.status[source]}</em>
+    `;
+    platformList.appendChild(row);
+  });
+
+  streamList.innerHTML = "";
+  state.profiles.forEach((profile) => {
+    const messages = state.messages.filter((msg) => (msg.profileId || "") === profile.id || (!msg.profileId && msg.streamName === profile.name));
+    const viewers = sourceKeys()
+      .map((source) => viewerCountForKey(connectionKey(source, profile.id)))
+      .filter(Number.isFinite);
+    const viewerTotal = viewers.reduce((sum, value) => sum + value, 0);
+    const platformBits = sourceKeys()
+      .map((source) => {
+        const sourceMessages = messages.filter((msg) => msg.source === source).length;
+        const sourceViewers = viewerCountForKey(connectionKey(source, profile.id));
+        return `${sources[source].name} ${sourceMessages}${Number.isFinite(sourceViewers) ? `/${formatNumber(sourceViewers)}v` : ""}`;
+      })
+      .join(" · ");
+    const row = document.createElement("div");
+    row.className = "metric-row";
+    row.innerHTML = `
+      <span><strong>${escapeHtml(profile.name || "Stream")}</strong><small>${messages.length} messages · ${viewers.length ? formatNumber(viewerTotal) : "--"} viewers</small><small>${escapeHtml(platformBits)}</small></span>
+      <em>${Object.entries(state.connectionStatus).filter(([key, status]) => key.startsWith(`${profile.id}:`) && status === "live").length}/3</em>
+    `;
+    streamList.appendChild(row);
+  });
+}
+
 function renderStats() {
   pruneRate();
   const live = connectedCount();
+  const viewerValues = Object.entries(state.viewerCounts)
+    .filter(([key, item]) => state.connectionStatus[key] === "live" && Number.isFinite(item.count))
+    .map(([, item]) => item.count);
+  const viewerTotal = viewerValues.reduce((sum, count) => sum + count, 0);
   document.getElementById("totalCount").textContent = state.messages.length;
   document.getElementById("statTotal").textContent = state.messages.length;
   document.getElementById("statRate").textContent = state.rateWindow.length;
   document.getElementById("statPeak").textContent = state.peak;
-  document.getElementById("statSources").textContent = live;
+  document.getElementById("statViewers").textContent = viewerValues.length ? formatNumber(viewerTotal) : "--";
   document.getElementById("rateLabel").textContent = `${state.rateWindow.length} msg/min`;
   document.getElementById("activeLabel").textContent = state.filter === "all" ? "All sources" : sources[state.filter].name;
   document.getElementById("statusLabel").textContent = live ? `${live} source${live === 1 ? "" : "s"} connected` : "No sources connected";
   document.getElementById("liveDot").classList.toggle("on", live > 0);
   pauseBtn.title = state.paused ? "Resume feed" : "Pause feed";
   pauseBtn.setAttribute("aria-label", pauseBtn.title);
+  renderActivityBreakdowns();
 }
 
 function renderSetup() {
@@ -1473,12 +1590,25 @@ function connectSse(source, url, profileId = state.activeProfileId, streamName =
     setSourceStatus(source, "live", `${sources[source].name} connected for ${streamName}.`, key);
   });
 
+  stream.addEventListener("status", (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      if (payload.viewerCount !== undefined) setViewerCount(source, profileId, payload.viewerCount, streamName);
+      setSourceStatus(source, "live", `${sources[source].name} connected for ${streamName}.`, key);
+    } catch {
+    }
+  });
+
   stream.addEventListener("message", (event) => {
     try {
       const payload = JSON.parse(event.data);
-      addMessage(payload.source || source, payload.user || payload.username, payload.text, payload.badge || "", payload.streamName || streamName);
+      addMessage(payload.source || source, payload.user || payload.username, payload.text, payload.badge || "", payload.streamName || streamName, {
+        id: payload.id,
+        ts: payload.ts || (payload.created_at ? Date.parse(payload.created_at) : undefined),
+        profileId
+      });
     } catch (error) {
-      addMessage(source, "system", event.data, "RAW", streamName);
+      addMessage(source, "system", event.data, "RAW", streamName, { profileId });
     }
   });
 
@@ -1615,6 +1745,8 @@ function disconnectSource(source, key = connectionKey(source)) {
     if (typeof stream.close === "function") stream.close();
     state.streams[key] = null;
   }
+  clearViewerTimer(key);
+  delete state.viewerCounts[key];
   setSourceStatus(source, "ready", `${sources[source].name} disconnected.`, key);
 }
 
@@ -1634,6 +1766,7 @@ function connectKick() {
   if (channel) resolved.searchParams.set("channel", channel);
   if (roomId) resolved.searchParams.set("roomId", roomId);
   connectSse("kick", resolved.toString(), profileId, streamName);
+  if (channel) startKickViewerPolling(profileId, channel);
 }
 
 function connectTwitch() {
@@ -1679,6 +1812,7 @@ function connectTwitch() {
       }
       if (line.includes("001") || line.includes(`JOIN #${channel}`)) {
         setSourceStatus("twitch", "live", `Connected ${streamName} to Twitch #${channel}. Waiting for chat messages.`, key);
+        startTwitchViewerPolling(profileId, channel, token);
       }
       if (!line.includes("PRIVMSG")) return;
       const tagStr = line.startsWith("@") ? line.split(" :")[0].slice(1) : "";
@@ -1691,7 +1825,7 @@ function connectTwitch() {
       const msgMatch = line.match(/PRIVMSG #[^ ]+ :(.+)/);
       if (!userMatch || !msgMatch) return;
       const badge = tags.mod === "1" ? "MOD" : tags.subscriber === "1" ? "SUB" : "";
-      addMessage("twitch", tags["display-name"] || userMatch[1], msgMatch[1], badge, streamName);
+      addMessage("twitch", tags["display-name"] || userMatch[1], msgMatch[1], badge, streamName, { profileId });
     });
   });
 
@@ -1703,6 +1837,48 @@ function connectTwitch() {
       setSourceStatus("twitch", "ready", "Twitch disconnected.", key);
     }
   });
+}
+
+async function updateKickViewerCount(profileId, channel) {
+  if (!channel) return;
+  try {
+    const url = new URL("/kick/meta", window.location.origin);
+    url.searchParams.set("channel", channel);
+    const response = await fetch(url);
+    if (!response.ok) return;
+    const body = await response.json();
+    setViewerCount("kick", profileId, body.viewerCount, channel);
+  } catch {
+  }
+}
+
+function startKickViewerPolling(profileId, channel) {
+  const key = connectionKey("kick", profileId);
+  clearViewerTimer(key);
+  updateKickViewerCount(profileId, channel);
+  state.viewerTimers[key] = setInterval(() => updateKickViewerCount(profileId, channel), 30000);
+}
+
+async function updateTwitchViewerCount(profileId, channel, token) {
+  if (!channel || !token) return;
+  try {
+    const response = await fetch("/twitch/meta", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ channel, token })
+    });
+    if (!response.ok) return;
+    const body = await response.json();
+    setViewerCount("twitch", profileId, body.viewerCount, channel);
+  } catch {
+  }
+}
+
+function startTwitchViewerPolling(profileId, channel, token) {
+  const key = connectionKey("twitch", profileId);
+  clearViewerTimer(key);
+  updateTwitchViewerCount(profileId, channel, token);
+  state.viewerTimers[key] = setInterval(() => updateTwitchViewerCount(profileId, channel, token), 30000);
 }
 
 function waitForSettled(source, key = connectionKey(source), timeoutMs = 8000) {
@@ -1823,7 +1999,7 @@ document.getElementById("composer").addEventListener("submit", (event) => {
   event.preventDefault();
   const text = messageInput.value.trim();
   if (!text) return;
-  addMessage(sendSource.value, "local", text, "NOTE");
+  addMessage(sendSource.value, "local", text, "NOTE", activeStreamName(), { profileId: state.activeProfileId });
   messageInput.value = "";
 });
 

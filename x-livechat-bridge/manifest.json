@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StreamHub X Livechat Bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Captures X livechat popout messages and sends them to local StreamHub.",
   "host_permissions": [
     "https://x.com/*",

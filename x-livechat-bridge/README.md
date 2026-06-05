@@ -35,3 +35,9 @@ Messages visible in the X chat popout will appear in StreamHub and the OBS overl
 - This bridge depends on X's current web page structure and may need updates if X changes the chat UI.
 - The official X API path is still available in StreamHub for public posts, mentions, and hashtag feeds.
 - The bridge only sends messages to your local machine. No cloud relay is used.
+
+## Troubleshooting
+
+- After updating this folder, open `chrome://extensions/` and click the reload button on `StreamHub X Livechat Bridge`, then refresh the X chat tab.
+- If the overlay shows duplicates, make sure the updated StreamHub app is running and refresh the OBS Browser Source cache.
+- Repeated messages from the same user are allowed. The bridge dedupes by chat row, not by message text.

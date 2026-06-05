@@ -160,6 +160,8 @@ If you do not want to install the extension, use `Copy console fallback` in the 
 
 The livechat bridge is experimental because it depends on X's current web page structure. If X changes the chat UI, the bridge may need an update.
 
+After updating StreamHub, reload the unpacked extension from `chrome://extensions/` and refresh the X chat tab. The bridge dedupes by chat row, so repeated messages from the same user are allowed while duplicate scans of the same visible row are ignored.
+
 ## Collab Streams
 
 StreamHub supports multiple stream slots for co-streams and collabs.
@@ -175,6 +177,12 @@ Messages in the hub are labeled with both the platform and the stream name:
 [Twitch] [elchefdesol] viewer123: let's go
 [Kick] [cohost] fan88: chat is moving
 ```
+
+The Activity panel breaks chat down by platform and by stream slot. Viewer counts are shown when StreamHub can fetch them:
+
+- Twitch: uses the Twitch OAuth token to validate the token's Client-ID, then reads the live stream's `viewer_count`.
+- Kick: uses Kick channel metadata when Kick returns a live `viewer_count`.
+- X: shows message activity, but viewer count is `--` because X does not expose a reliable public livechat viewer count through this bridge.
 
 ## Files
 

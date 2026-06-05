@@ -116,22 +116,41 @@
     return lines[lines.length - 1] || "";
   }
 
+  function rowBridgeId(row) {
+    let id = row.getAttribute("data-streamhub-x-id");
+    if (!id) {
+      id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      row.setAttribute("data-streamhub-x-id", id);
+    }
+    return id;
+  }
+
+  function rowWasSent(row) {
+    return row.__streamHubSkip || row.getAttribute("data-streamhub-x-sent") === "1";
+  }
+
+  function markRowSent(row) {
+    row.__streamHubSkip = true;
+    row.setAttribute("data-streamhub-x-sent", "1");
+  }
+
   function parseRow(row) {
-    if (!row || row.__streamHubSkip) return null;
+    if (!row || rowWasSent(row)) return null;
     const username = usernameFrom(row);
     const displayName = displayNameFrom(row);
     const message = messageFrom(row, username, displayName);
     const user = username || displayName || "X livechat";
     if (!message || clean(message).length < 2 || clean(message) === clean(user)) return null;
 
-    const id = clean(`${user}:${message}`);
+    const id = clean(`x-livechat:${rowBridgeId(row)}:${user}:${message}`);
     if (!remember(id)) return null;
-    row.__streamHubSkip = true;
+    markRowSent(row);
     return {
       source: "x",
       user: user.startsWith("@") ? user : `@${user}`,
       text: message,
-      id
+      id,
+      ts: Date.now()
     };
   }
 
@@ -169,8 +188,8 @@
         const displayName = displayNameFrom(row);
         const message = messageFrom(row, username, displayName);
         const user = username || displayName || "X livechat";
-        if (message) remember(clean(`${user}:${message}`));
-        row.__streamHubSkip = true;
+        if (message) remember(clean(`x-livechat:${rowBridgeId(row)}:${user}:${message}`));
+        markRowSent(row);
         continue;
       }
       const parsed = parseRow(row);

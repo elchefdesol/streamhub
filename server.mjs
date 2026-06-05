@@ -119,7 +119,41 @@ async function fetchKickChannel(slug) {
   return {
     slug: body.slug || slug,
     username: body.user?.username || body.slug || slug,
-    chatroomId
+    chatroomId,
+    viewerCount: body.livestream?.viewer_count ?? body.viewer_count ?? null,
+    isLive: Boolean(body.livestream)
+  };
+}
+
+async function fetchTwitchViewerCount(channel, token) {
+  const cleanToken = String(token || "").replace(/^oauth:/i, "").trim();
+  const cleanChannel = String(channel || "").trim().replace(/^@/, "").toLowerCase();
+  if (!cleanChannel || !cleanToken) throw new Error("Missing Twitch channel or OAuth token.");
+
+  const validateResponse = await fetch("https://id.twitch.tv/oauth2/validate", {
+    headers: { authorization: `OAuth ${cleanToken}` }
+  });
+  const validateBody = await validateResponse.json().catch(() => ({}));
+  if (!validateResponse.ok || !validateBody.client_id) {
+    throw new Error(validateBody.message || "Twitch token validation failed.");
+  }
+
+  const streamsResponse = await fetch(`https://api.twitch.tv/helix/streams?user_login=${encodeURIComponent(cleanChannel)}`, {
+    headers: {
+      authorization: `Bearer ${cleanToken}`,
+      "client-id": validateBody.client_id
+    }
+  });
+  const streamsBody = await streamsResponse.json().catch(() => ({}));
+  if (!streamsResponse.ok) {
+    throw new Error(streamsBody.message || `Twitch streams lookup failed: HTTP ${streamsResponse.status}`);
+  }
+
+  const stream = streamsBody.data?.[0];
+  return {
+    channel: cleanChannel,
+    isLive: Boolean(stream),
+    viewerCount: stream?.viewer_count ?? null
   };
 }
 
@@ -198,8 +232,8 @@ async function handleKickStream(req, res, url) {
   });
 
   try {
-    const channel = roomId ? { slug: slug || "kick", username: slug || "Kick", chatroomId: roomId } : await fetchKickChannel(slug);
-    sendSse(res, "status", { source: "kick", status: "connected", channel: channel.slug, chatroomId: channel.chatroomId });
+    const channel = roomId ? { slug: slug || "kick", username: slug || "Kick", chatroomId: roomId, viewerCount: null } : await fetchKickChannel(slug);
+    sendSse(res, "status", { source: "kick", status: "connected", channel: channel.slug, chatroomId: channel.chatroomId, viewerCount: channel.viewerCount });
 
     ws = new WebSocket("wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=7.6.0&flash=false");
 
@@ -306,13 +340,14 @@ async function handleXLivechatPush(req, res) {
       }
 
       accepted += 1;
+      const createdAt = Number.isFinite(Number(item.ts)) ? new Date(Number(item.ts)).toISOString() : new Date().toISOString();
       broadcastXLivechat({
         source: "x",
         id,
         user,
         text,
         badge: "LIVECHAT",
-        created_at: new Date().toISOString()
+        created_at: createdAt
       });
     }
 
@@ -363,6 +398,7 @@ async function handleHubPush(req, res) {
       text: body.text || "",
       badge: body.badge || "",
       streamName: body.streamName || "",
+      profileId: body.profileId || "",
       ts: body.ts || Date.now()
     };
     broadcastHub(payload);
@@ -374,6 +410,35 @@ async function handleHubPush(req, res) {
 
 async function handleHubRecent(req, res) {
   sendJson(res, 200, { messages: hubRecent.slice(-20), clients: hubClients.size });
+}
+
+async function handleKickMeta(req, res, url) {
+  try {
+    const slug = url.searchParams.get("channel")?.trim().replace(/^@/, "");
+    if (!slug) {
+      sendJson(res, 400, { error: "Missing Kick channel." });
+      return;
+    }
+    const channel = await fetchKickChannel(slug);
+    sendJson(res, 200, {
+      source: "kick",
+      channel: channel.slug,
+      isLive: channel.isLive,
+      viewerCount: channel.viewerCount
+    });
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
+}
+
+async function handleTwitchMeta(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    const meta = await fetchTwitchViewerCount(body.channel, body.token);
+    sendJson(res, 200, { source: "twitch", ...meta });
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
 }
 
 const server = http.createServer((req, res) => {
@@ -431,6 +496,16 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === "/hub/recent") {
     handleHubRecent(req, res);
+    return;
+  }
+
+  if (url.pathname === "/kick/meta") {
+    handleKickMeta(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/twitch/meta" && req.method === "POST") {
+    handleTwitchMeta(req, res);
     return;
   }
 
