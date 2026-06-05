@@ -12,9 +12,19 @@ const DEFAULT_INTERVAL_MS = Number(process.env.X_POLL_INTERVAL_MS || 15000);
 const YOUTUBE_MIN_POLL_INTERVAL_MS = Math.max(Number(process.env.YOUTUBE_MIN_POLL_INTERVAL_MS || 15000), 1000);
 const xLivechatClients = new Set();
 const xLivechatSeen = new Set();
+const pumpLivechatClients = new Set();
+const pumpLivechatSeen = new Set();
 const hubClients = new Set();
 const hubSeen = new Set();
 const hubRecent = [];
+
+const assetTypes = new Map([
+  [".svg", "image/svg+xml; charset=utf-8"],
+  [".png", "image/png"],
+  [".jpg", "image/jpeg"],
+  [".jpeg", "image/jpeg"],
+  [".webp", "image/webp"]
+]);
 
 async function loadDotEnv() {
   try {
@@ -42,6 +52,29 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body, null, 2));
 }
 
+function serveAsset(res, url) {
+  const rawName = decodeURIComponent(url.pathname.replace(/^\/assets\//, ""));
+  const cleanName = path.basename(rawName);
+  if (!cleanName || cleanName !== rawName) {
+    sendJson(res, 404, { error: "Asset not found" });
+    return;
+  }
+
+  const filePath = path.join(ROOT, "assets", cleanName);
+  const contentType = assetTypes.get(path.extname(cleanName).toLowerCase()) || "application/octet-stream";
+
+  fs.readFile(filePath)
+    .then((file) => {
+      res.writeHead(200, {
+        "content-type": contentType,
+        "cache-control": "no-store",
+        "access-control-allow-origin": "*"
+      });
+      res.end(file);
+    })
+    .catch(() => sendJson(res, 404, { error: "Asset not found" }));
+}
+
 function sendSse(res, event, payload) {
   if (event) res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -49,6 +82,12 @@ function sendSse(res, event, payload) {
 
 function broadcastXLivechat(payload) {
   for (const res of xLivechatClients) {
+    sendSse(res, "message", payload);
+  }
+}
+
+function broadcastPumpLivechat(payload) {
+  for (const res of pumpLivechatClients) {
     sendSse(res, "message", payload);
   }
 }
@@ -420,6 +459,68 @@ async function handleXLivechatPush(req, res) {
   }
 }
 
+async function handlePumpLivechatStream(req, res) {
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+    "access-control-allow-origin": "*"
+  });
+
+  pumpLivechatClients.add(res);
+  sendSse(res, "status", { source: "pump", status: "connected", mode: "livechat-bridge" });
+
+  req.on("close", () => {
+    pumpLivechatClients.delete(res);
+  });
+}
+
+async function handlePumpLivechatPush(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    if (body.type === "bridge-status") {
+      const message = body.url
+        ? `Pump.fun bridge detected on ${body.url}. Waiting for new chat messages.`
+        : "Pump.fun bridge detected. Waiting for new chat messages.";
+      for (const client of pumpLivechatClients) {
+        sendSse(client, "status", { source: "pump", status: "connected", mode: "livechat-bridge", bridgeSeen: true, message });
+      }
+      sendJson(res, 200, { ok: true, type: "bridge-status", clients: pumpLivechatClients.size });
+      return;
+    }
+
+    const items = Array.isArray(body.messages) ? body.messages : [body];
+    let accepted = 0;
+
+    for (const item of items) {
+      const text = String(item.text || "").trim();
+      if (!text) continue;
+      const user = String(item.user || item.username || "Pump user").trim();
+      const id = String(item.id || `pump:${user}:${text}:${item.ts || ""}`).slice(0, 600);
+      if (pumpLivechatSeen.has(id)) continue;
+      pumpLivechatSeen.add(id);
+      if (pumpLivechatSeen.size > 2000) {
+        const first = pumpLivechatSeen.values().next().value;
+        pumpLivechatSeen.delete(first);
+      }
+
+      accepted += 1;
+      broadcastPumpLivechat({
+        source: "pump",
+        id,
+        user,
+        text,
+        badge: item.badge || "PUMP",
+        created_at: Number.isFinite(Number(item.ts)) ? new Date(Number(item.ts)).toISOString() : new Date().toISOString()
+      });
+    }
+
+    sendJson(res, 200, { ok: true, accepted, clients: pumpLivechatClients.size });
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
+}
+
 async function handleHubStream(req, res) {
   res.writeHead(200, {
     "content-type": "text/event-stream; charset=utf-8",
@@ -636,6 +737,11 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (url.pathname.startsWith("/assets/")) {
+    serveAsset(res, url);
+    return;
+  }
+
   if (url.pathname === "/config/x" && req.method === "POST") {
     readJsonBody(req)
       .then((body) => {
@@ -658,6 +764,16 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === "/x/livechat/push" && req.method === "POST") {
     handleXLivechatPush(req, res);
+    return;
+  }
+
+  if (url.pathname === "/pump/livechat/stream") {
+    handlePumpLivechatStream(req, res);
+    return;
+  }
+
+  if (url.pathname === "/pump/livechat/push" && req.method === "POST") {
+    handlePumpLivechatPush(req, res);
     return;
   }
 
@@ -710,6 +826,20 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/pump/livechat/capture.js") {
+    fs.readFile(path.join(ROOT, "pump-livechat-bridge", "content.js"), "utf8")
+      .then((script) => {
+        res.writeHead(200, {
+          "content-type": "text/javascript; charset=utf-8",
+          "cache-control": "no-store",
+          "access-control-allow-origin": "*"
+        });
+        res.end(script);
+      })
+      .catch(() => sendJson(res, 500, { error: "Could not read pump-livechat-bridge/content.js" }));
+    return;
+  }
+
   if (url.pathname === "/" || url.pathname === "/overlay" || url.pathname === "/streamhub-contest.html") {
     fs.readFile(path.join(ROOT, "streamhub-contest.html"), "utf8")
       .then((html) => {
@@ -735,7 +865,7 @@ const server = http.createServer((req, res) => {
 
   sendJson(res, 404, {
     error: "Not found",
-    endpoints: ["/health", "/hub/stream", "/hub/push", "/hub/recent", "/x/stream?query=%23YourStreamTag", "/youtube/stream?url=YouTubeLiveUrl", "/kick/stream?channel=YourKickChannel"]
+    endpoints: ["/health", "/hub/stream", "/hub/push", "/hub/recent", "/x/stream?query=%23YourStreamTag", "/youtube/stream?url=YouTubeLiveUrl", "/pump/livechat/stream", "/kick/stream?channel=YourKickChannel"]
   });
 });
 

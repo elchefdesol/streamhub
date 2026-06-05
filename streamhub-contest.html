@@ -22,6 +22,7 @@
     --kick: #53fc18;
     --x: #f4f6f8;
     --youtube: #ff0033;
+    --pump: #26d07c;
   }
 
   * { box-sizing: border-box; }
@@ -184,9 +185,12 @@
     border: 1px solid rgba(255,255,255,.1);
   }
 
-  .setup-icon svg {
+  .setup-icon svg,
+  .setup-icon img {
     width: 18px;
     height: 18px;
+    display: block;
+    object-fit: contain;
   }
 
   .setup-card-head strong {
@@ -411,7 +415,13 @@
     border-color: rgba(24, 214, 163, .55);
   }
 
-  .tab svg { width: 15px; height: 15px; }
+  .tab svg,
+  .tab img {
+    width: 15px;
+    height: 15px;
+    display: block;
+    object-fit: contain;
+  }
 
   .tab-count {
     min-width: 22px;
@@ -509,19 +519,28 @@
     border: 1px solid transparent;
   }
 
-  .source-icon svg { width: 16px; height: 16px; }
+  .source-icon svg,
+  .source-icon img {
+    width: 16px;
+    height: 16px;
+    display: block;
+    object-fit: contain;
+  }
   .msg[data-source="twitch"] .source-icon { background: rgba(145, 70, 255, .16); border-color: rgba(145, 70, 255, .25); color: var(--twitch); }
   .msg[data-source="kick"] .source-icon { background: rgba(83, 252, 24, .12); border-color: rgba(83, 252, 24, .22); color: var(--kick); }
   .msg[data-source="x"] .source-icon { background: rgba(244, 246, 248, .08); border-color: rgba(244, 246, 248, .16); color: var(--x); }
   .msg[data-source="youtube"] .source-icon { background: rgba(255, 0, 51, .12); border-color: rgba(255, 0, 51, .24); color: var(--youtube); }
+  .msg[data-source="pump"] .source-icon { background: rgba(38, 208, 124, .12); border-color: rgba(38, 208, 124, .24); color: var(--pump); }
 
   .msg-main { min-width: 0; }
   .msg-meta { display: flex; align-items: baseline; gap: 7px; min-width: 0; flex-wrap: wrap; }
+  .meta-platform-icon { display: none; }
   .user { font-weight: 800; font-size: .9rem; overflow-wrap: anywhere; }
   .msg[data-source="twitch"] .user { color: #cdb6ff; }
   .msg[data-source="kick"] .user { color: #aaff88; }
   .msg[data-source="x"] .user { color: #f3f5f7; }
   .msg[data-source="youtube"] .user { color: #ffb8c5; }
+  .msg[data-source="pump"] .user { color: #9af2c8; }
 
   .source-label, .badge {
     height: 18px;
@@ -776,18 +795,57 @@
 
   body.overlay-mode .source-icon,
   body.overlay-mode .source-label,
-  body.overlay-mode .badge,
   body.overlay-mode .time {
     display: none;
   }
 
   body.overlay-mode .msg-meta {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
   }
 
   body.overlay-mode .user {
     font-size: 1rem;
     color: #ffffff;
+  }
+
+  body.overlay-mode .meta-platform-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    display: inline-grid;
+    place-items: center;
+    color: #ffffff;
+    background: rgba(255,255,255,.12);
+    box-shadow: 0 2px 8px rgba(0,0,0,.42);
+  }
+
+  body.overlay-mode .meta-platform-icon svg,
+  body.overlay-mode .meta-platform-icon img {
+    width: 13px;
+    height: 13px;
+    display: block;
+    object-fit: contain;
+  }
+
+  body.overlay-mode .badge {
+    display: inline-grid;
+    height: 18px;
+    border-radius: 999px;
+    padding: 0 7px;
+    background: rgba(247, 185, 85, .22);
+    color: #ffe2a8;
+    font-size: .64rem;
+    line-height: 1;
+    text-shadow: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,.42);
+  }
+
+  body.overlay-mode .stream-badge {
+    background: rgba(24, 214, 163, .22);
+    color: #b7ffe9;
   }
 
   body.overlay-mode .text {
@@ -816,7 +874,7 @@
         </div>
       </div>
       <div class="setup-count">
-        <strong id="setupCount">0/3</strong>
+        <strong id="setupCount">0/5</strong>
         <span>connected</span>
       </div>
     </div>
@@ -905,6 +963,23 @@
 
       <article class="setup-card">
         <div class="setup-card-head">
+          <div class="setup-icon" style="color:var(--pump); background:rgba(38,208,124,.12)"></div>
+          <div><strong>Pump.fun</strong><small>Experimental livechat bridge</small></div>
+          <span class="status-chip" id="setupStatus-pump">Ready</span>
+        </div>
+        <div class="setup-card-body">
+          <div class="field"><label for="pumpLivechatUrl">Livechat URL</label><input id="pumpLivechatUrl" placeholder="https://pump.fun/livechat/..."></div>
+          <div class="help-links">
+            <button class="chip-btn" type="button" id="openPumpLivechat">Open Pump chat</button>
+            <button class="chip-btn" type="button" id="copyPumpBridgeScript">Copy console fallback</button>
+          </div>
+          <button class="text-btn primary" type="button" id="connectPump">Connect Pump.fun Bridge</button>
+          <p class="note" id="setupMsg-pump">Load the optional <code>pump-livechat-bridge</code> extension, open the Pump livechat tab, then connect this bridge.</p>
+        </div>
+      </article>
+
+      <article class="setup-card">
+        <div class="setup-card-head">
           <div class="setup-icon" style="color:var(--kick); background:rgba(83,252,24,.10)"></div>
           <div><strong>Kick</strong><small>Live channel chat</small></div>
           <span class="status-chip" id="setupStatus-kick">Ready</span>
@@ -946,7 +1021,7 @@
       </div>
       <div>
         <h1>StreamHub</h1>
-        <p>Unified real-time chat for Twitch, X, and Kick</p>
+        <p>Unified real-time chat for Twitch, X, YouTube, Pump.fun, and Kick</p>
       </div>
     </div>
 
@@ -1062,6 +1137,18 @@
 
       <details class="connector">
         <summary>
+          <span class="source-dot" style="background: var(--pump)"></span>
+          <strong>Pump.fun Chat</strong>
+          <span>Local bridge</span>
+        </summary>
+        <div class="connector-body">
+          <button class="text-btn danger" type="button" id="disconnectPump">Disconnect Pump.fun</button>
+          <p class="note">Pump.fun uses an experimental local bridge that reads the public livechat page and forwards visible messages into StreamHub.</p>
+        </div>
+      </details>
+
+      <details class="connector">
+        <summary>
           <span class="source-dot" style="background: var(--kick)"></span>
           <strong>Kick Chat</strong>
           <span>Local relay</span>
@@ -1092,6 +1179,11 @@ const sources = {
     color: "#ff0033",
     icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31.4 31.4 0 0 0 0 12a31.4 31.4 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31.4 31.4 0 0 0 24 12a31.4 31.4 0 0 0-.5-5.8ZM9.6 15.6V8.4l6.2 3.6-6.2 3.6Z"/></svg>'
   },
+  pump: {
+    name: "Pump.fun",
+    color: "#26d07c",
+    icon: '<img src="/assets/pump-logomark.svg" alt="" aria-hidden="true">'
+  },
   kick: {
     name: "Kick",
     color: "#53fc18",
@@ -1103,7 +1195,8 @@ document.querySelectorAll(".setup-icon")[0].innerHTML = '<svg viewBox="0 0 24 24
 document.querySelectorAll(".setup-icon")[1].innerHTML = sources.twitch.icon;
 document.querySelectorAll(".setup-icon")[2].innerHTML = sources.x.icon;
 document.querySelectorAll(".setup-icon")[3].innerHTML = sources.youtube.icon;
-document.querySelectorAll(".setup-icon")[4].innerHTML = sources.kick.icon;
+document.querySelectorAll(".setup-icon")[4].innerHTML = sources.pump.icon;
+document.querySelectorAll(".setup-icon")[5].innerHTML = sources.kick.icon;
 
 const state = {
   messages: [],
@@ -1143,6 +1236,7 @@ const setupFieldIds = [
   "xLivechatUrl",
   "youtubeUrl",
   "youtubeRelay",
+  "pumpLivechatUrl",
   "kickChannel",
   "kickRoomId",
   "kickRelay",
@@ -1283,6 +1377,7 @@ function addStreamProfile() {
       streamName: `Stream ${next}`,
       xProxy: "/x/stream",
       youtubeRelay: "/youtube/stream",
+      pumpLivechatUrl: "",
       kickRelay: "/kick/stream"
     }
   };
@@ -1452,6 +1547,7 @@ function messageNode(msg) {
     <div class="source-icon">${src.icon}</div>
     <div class="msg-main">
       <div class="msg-meta">
+        <span class="meta-platform-icon" aria-hidden="true">${src.icon}</span>
         <span class="user">${escapeHtml(msg.user)}</span>
         <span class="source-label">${src.name}</span>
         ${streamBadge}
@@ -1641,7 +1737,8 @@ function connectSse(source, url, profileId = state.activeProfileId, streamName =
       const payload = JSON.parse(event.data);
       if (payload.viewerCount !== undefined) setViewerCount(source, profileId, payload.viewerCount, streamName);
       const waitNote = payload.nextPollMs ? ` Next poll in ${Math.round(payload.nextPollMs / 1000)}s.` : "";
-      setSourceStatus(source, "live", `${sources[source].name} connected for ${streamName}.${waitNote}`, key);
+      const bridgeNote = payload.bridgeSeen ? " Bridge extension detected." : "";
+      setSourceStatus(source, "live", payload.message || `${sources[source].name} connected for ${streamName}.${bridgeNote}${waitNote}`, key);
     } catch {
     }
   });
@@ -1804,6 +1901,56 @@ function connectYoutube() {
   else resolved.searchParams.set("video", input);
   resolved.searchParams.set("token", token);
   connectSse("youtube", resolved.toString(), profileId, streamName);
+}
+
+function normalizePumpLivechatUrl() {
+  const raw = document.getElementById("pumpLivechatUrl").value.trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw.startsWith("http") ? raw : `https://pump.fun/livechat/${raw}`);
+    if (!url.hostname.includes("pump.fun")) return "";
+    if (!url.pathname.startsWith("/livechat/")) {
+      const id = url.pathname.split("/").filter(Boolean).pop() || raw;
+      url.pathname = `/livechat/${id}`;
+    }
+    return url.toString();
+  } catch {
+    return `https://pump.fun/livechat/${raw.replace(/^\/+/, "")}`;
+  }
+}
+
+function openPumpLivechat() {
+  const url = normalizePumpLivechatUrl();
+  if (!url) {
+    setSourceStatus("pump", "error", "Enter a Pump.fun livechat URL first.");
+    return;
+  }
+  document.getElementById("pumpLivechatUrl").value = url;
+  saveSetupFields();
+  window.open(url, "_blank", "noopener,noreferrer");
+  setSetupMessage("pump", "Opened Pump.fun chat. Keep that tab open with the Pump bridge extension running.");
+}
+
+async function copyPumpBridgeScript() {
+  const script = `(() => {
+  const s = document.createElement("script");
+  s.src = "${window.location.origin}/pump/livechat/capture.js?ts=" + Date.now();
+  document.documentElement.appendChild(s);
+})();`;
+  try {
+    await navigator.clipboard.writeText(script);
+    setSetupMessage("pump", "Copied the console fallback. Open the Pump livechat tab, paste it into DevTools Console, and press Enter.");
+  } catch {
+    setSetupMessage("pump", "Could not copy automatically. Use the optional pump-livechat-bridge extension instead.");
+  }
+}
+
+function connectPump() {
+  saveSetupFields();
+  const profileId = state.activeProfileId;
+  const streamName = activeStreamName();
+  connectSse("pump", new URL("/pump/livechat/stream", window.location.origin).toString(), profileId, streamName);
+  setSetupMessage("pump", "Pump.fun bridge connected. Open the Pump livechat tab with the extension running, then watch for new messages.");
 }
 
 function disconnectSource(source, key = connectionKey(source)) {
@@ -1970,6 +2117,7 @@ async function connectAll() {
   const xApiReady = document.getElementById("xQuery").value.trim() && await hasConfiguredXToken();
   const xLivechatReady = document.getElementById("xLivechatUrl").value.trim();
   const youtubeReady = document.getElementById("youtubeUrl").value.trim() && document.getElementById("youtubeToken").value.trim();
+  const pumpReady = document.getElementById("pumpLivechatUrl").value.trim();
   const kickReady = document.getElementById("kickChannel").value.trim() || document.getElementById("kickRoomId").value.trim();
 
   if (twitchReady) {
@@ -1993,7 +2141,14 @@ async function connectAll() {
     connectYoutube();
     jobs.push(waitForSettled("youtube", connectionKey("youtube", profileId)));
   } else {
-    setSourceStatus("youtube", "ready", "YouTube skipped. Enter a live URL and OAuth access token to connect it.");
+    setSourceStatus("youtube", "ready", "YouTube skipped. Enter a live URL and API key or OAuth token to connect it.");
+  }
+
+  if (pumpReady) {
+    connectPump();
+    jobs.push(waitForSettled("pump", connectionKey("pump", profileId)));
+  } else {
+    setSourceStatus("pump", "ready", "Pump.fun skipped. Enter a livechat URL to connect it.");
   }
 
   if (kickReady) {
@@ -2064,6 +2219,10 @@ document.getElementById("copyXBridgeScript").addEventListener("click", copyXBrid
 document.getElementById("disconnectX").addEventListener("click", () => disconnectSource("x"));
 document.getElementById("connectYoutube").addEventListener("click", connectYoutube);
 document.getElementById("disconnectYoutube").addEventListener("click", () => disconnectSource("youtube"));
+document.getElementById("connectPump").addEventListener("click", connectPump);
+document.getElementById("openPumpLivechat").addEventListener("click", openPumpLivechat);
+document.getElementById("copyPumpBridgeScript").addEventListener("click", copyPumpBridgeScript);
+document.getElementById("disconnectPump").addEventListener("click", () => disconnectSource("pump"));
 document.getElementById("connectKick").addEventListener("click", connectKick);
 document.getElementById("disconnectKick").addEventListener("click", () => disconnectSource("kick"));
 document.getElementById("connectTwitch").addEventListener("click", connectTwitch);

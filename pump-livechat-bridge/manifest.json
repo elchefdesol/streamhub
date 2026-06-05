@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "StreamHub Pump.fun Livechat Bridge",
+  "version": "0.1.0",
+  "description": "Captures Pump.fun livechat messages and sends them to local StreamHub.",
+  "host_permissions": [
+    "https://pump.fun/*",
+    "http://127.0.0.1:3000/*",
+    "http://localhost:3000/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://pump.fun/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "StreamHub Pump Bridge"
+  }
+}

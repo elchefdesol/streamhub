@@ -1,6 +1,6 @@
 # StreamHub
 
-Unified live feed for Twitch, X, YouTube, and Kick, designed to run as a local browser source in OBS or Streamlabs.
+Unified live feed for Twitch, X, YouTube, Pump.fun, and Kick, designed to run as a local browser source in OBS or Streamlabs.
 
 ## Quick Start
 
@@ -37,7 +37,7 @@ http://127.0.0.1:3000
 3. Fill in the platform cards.
 4. Use `+ Add Stream` if you want to merge chats from a cohost or another stream.
 5. Press `Connect Filled Platforms`, or connect platforms one by one.
-6. Confirm the counter shows connected sources, for example `1/4`, `2/4`, or `5/8`.
+6. Confirm the counter shows connected sources, for example `1/5`, `2/5`, or `6/10`.
 7. Press `Launch StreamHub`.
 
 Twitch needs a chat OAuth token with `chat:read`. The channel field is the Twitch channel you want to join.
@@ -52,6 +52,7 @@ Useful links:
 - X livechat bridge folder: `x-livechat-bridge`
 - YouTube API: https://console.cloud.google.com/apis/library/youtube.googleapis.com
 - YouTube live chat docs: https://developers.google.com/youtube/v3/live/docs/liveChatMessages/list
+- Pump.fun livechat bridge folder: `pump-livechat-bridge`
 
 Kick setup:
 
@@ -81,6 +82,19 @@ YouTube setup:
 
 StreamHub uses YouTube's official Live Chat API and follows YouTube's returned `pollingIntervalMillis`, with a default minimum of 15 seconds between chat polls so an 8-hour stream is much less likely to burn through daily quota.
 
+Pump.fun setup:
+
+1. Load the optional `pump-livechat-bridge` extension from `chrome://extensions/`.
+2. Paste a Pump.fun livechat URL into the Pump.fun card.
+3. Click `Connect Pump.fun Bridge`.
+4. Open the Pump.fun livechat tab and keep it open while streaming.
+
+Example:
+
+```text
+https://pump.fun/livechat/3VkUe5T9uAuU6EqmEMqQcuTRqEcqU86NAfwbFZKxpump
+```
+
 ## Local Settings
 
 StreamHub saves non-secret setup fields in your browser on this computer, so refreshes keep your channel names, queries, proxy URLs, and Kick chatroom ID.
@@ -97,7 +111,7 @@ X_BEARER_TOKEN=your_x_bearer_token_here
 
 StreamHub uses two local browser pages while you stream:
 
-- Main app / dock: connects Twitch, X, YouTube, and Kick.
+- Main app / dock: connects Twitch, X, YouTube, Pump.fun, and Kick.
 - Overlay: transparent username + message bubbles for the actual stream scene.
 
 ### OBS Dock
@@ -194,13 +208,30 @@ YOUTUBE_MIN_POLL_INTERVAL_MS=15000
 
 Viewer count comes from `liveStreamingDetails.concurrentViewers` when YouTube returns it.
 
+## How Pump.fun Works
+
+Pump.fun is an experimental local bridge, similar to the X livechat bridge.
+
+StreamHub does not depend on an official Pump.fun livechat API. Instead, the optional `pump-livechat-bridge` extension reads visible messages from the Pump.fun livechat page you already have open and sends them to the local StreamHub server.
+
+Install the optional extension:
+
+1. Open `chrome://extensions/` in Chrome, Edge, or Brave.
+2. Turn on `Developer mode`.
+3. Click `Load unpacked`.
+4. Select the `pump-livechat-bridge` folder from this repo.
+
+If you do not want to install the extension, use `Copy console fallback` in the Pump.fun card, open the Pump livechat tab, paste the script into DevTools Console, and press Enter.
+
+Pump.fun viewer count is not included yet; StreamHub shows Pump.fun message activity in the Activity panel.
+
 ## Collab Streams
 
 StreamHub supports multiple stream slots for co-streams and collabs.
 
 1. Click `+ Add Stream`.
 2. Name the stream slot, for example `elchefdesol`, `cohost`, or `team red`.
-3. Fill in that streamer's Twitch, X, YouTube, and Kick fields.
+3. Fill in that streamer's Twitch, X, YouTube, Pump.fun, and Kick fields.
 4. Connect the slot.
 
 Messages in the hub are labeled with both the platform and the stream name:
@@ -208,6 +239,7 @@ Messages in the hub are labeled with both the platform and the stream name:
 ```text
 [Twitch] [elchefdesol] viewer123: let's go
 [YouTube] [elchefdesol] fan22: hello from YT
+[Pump.fun] [elchefdesol] trader77: send it
 [Kick] [cohost] fan88: chat is moving
 ```
 
@@ -216,13 +248,16 @@ The Activity panel breaks chat down by platform and by stream slot. Viewer count
 - Twitch: uses the Twitch OAuth token to validate the token's Client-ID, then reads the live stream's `viewer_count`.
 - YouTube: uses YouTube `liveStreamingDetails.concurrentViewers` when available.
 - Kick: uses Kick channel metadata when Kick returns a live `viewer_count`.
+- Pump.fun: shows message activity, but viewer count is `--` because the bridge only captures visible chat messages.
 - X: shows message activity, but viewer count is `--` because X does not expose a reliable public livechat viewer count through this bridge.
 
 ## Files
 
 - `server.mjs`: local app server and platform relays
 - `streamhub-contest.html`: frontend UI and OBS overlay
+- `assets/`: local visual assets, including the Pump.fun logo
 - `x-livechat-bridge/`: optional browser extension for experimental X livechat capture
+- `pump-livechat-bridge/`: optional browser extension for experimental Pump.fun livechat capture
 - `.env.example`: config template
 
 ## Notes
