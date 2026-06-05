@@ -504,11 +504,9 @@
     border-radius: 8px;
     background: rgba(13, 16, 22, .44);
     flex: 0 0 auto;
-    animation: enter .18s ease-out;
   }
 
   .msg:hover { background: rgba(23, 27, 36, .72); border-color: rgba(42, 50, 66, .82); }
-  @keyframes enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
   .source-icon {
     width: 30px;
@@ -1223,6 +1221,7 @@ const drawer = document.getElementById("drawer");
 const sendSource = document.getElementById("sendSource");
 const messageInput = document.getElementById("messageInput");
 const storageKey = "streamhub.setup.v1";
+const feedNodeCache = new Map();
 let isOverlayMode = false;
 let overlayVisibleMs = 8500;
 let overlayMaxMessages = 5;
@@ -1552,6 +1551,7 @@ function messageNode(msg) {
   const node = document.createElement("article");
   node.className = "msg";
   node.dataset.source = msg.source;
+  node.dataset.id = msg.id;
   node.innerHTML = `
     <div class="source-icon">${src.icon}</div>
     <div class="msg-main">
@@ -1572,18 +1572,36 @@ function messageNode(msg) {
 function renderFeed() {
   const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 90;
   const items = visibleMessages();
-  feed.innerHTML = "";
+  const visibleIds = new Set(items.map((msg) => msg.id));
+  for (const [id, node] of feedNodeCache) {
+    if (!visibleIds.has(id)) {
+      node.remove();
+      feedNodeCache.delete(id);
+    }
+  }
 
   if (!items.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
+    let empty = feed.querySelector(".empty");
+    if (!empty) {
+      feed.innerHTML = "";
+      empty = document.createElement("div");
+      empty.className = "empty";
+      feed.appendChild(empty);
+    }
     empty.innerHTML = state.messages.length
       ? "No messages match this view."
       : "No messages yet. Connect X, Twitch, or Kick to start the unified feed.";
-    feed.appendChild(empty);
   } else {
+    feed.querySelector(".empty")?.remove();
     const frag = document.createDocumentFragment();
-    items.forEach((msg) => frag.appendChild(messageNode(msg)));
+    items.forEach((msg) => {
+      let node = feedNodeCache.get(msg.id);
+      if (!node) {
+        node = messageNode(msg);
+        feedNodeCache.set(msg.id, node);
+      }
+      frag.appendChild(node);
+    });
     feed.appendChild(frag);
   }
 
@@ -1769,17 +1787,17 @@ function connectSse(source, url, profileId = state.activeProfileId, streamName =
     if (event.data) {
       try {
         const payload = JSON.parse(event.data);
-        setSourceStatus(source, "error", payload.error || `${sources[source].name} connection failed.`, key);
+        setSourceStatus(source, "error", payload.error || `${sources[source].name} connection failed.`, key, { renderFeed: false });
         return;
       } catch {
       }
     }
-    setSourceStatus(source, "error", `${sources[source].name} connection failed. Check credentials or relay URL.`, key);
+    setSourceStatus(source, "error", `${sources[source].name} connection failed. Check credentials or relay URL.`, key, { renderFeed: false });
   });
 
   stream.addEventListener("error", () => {
     if (state.status[source] !== "error") {
-      setSourceStatus(source, "error", `${sources[source].name} connection failed. Check credentials or relay URL.`, key);
+      setSourceStatus(source, "error", `${sources[source].name} connection failed. Check credentials or relay URL.`, key, { renderFeed: false });
     }
   });
 }
