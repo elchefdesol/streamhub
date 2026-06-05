@@ -21,6 +21,7 @@
     --twitch: #9146ff;
     --kick: #53fc18;
     --x: #f4f6f8;
+    --youtube: #ff0033;
   }
 
   * { box-sizing: border-box; }
@@ -512,6 +513,7 @@
   .msg[data-source="twitch"] .source-icon { background: rgba(145, 70, 255, .16); border-color: rgba(145, 70, 255, .25); color: var(--twitch); }
   .msg[data-source="kick"] .source-icon { background: rgba(83, 252, 24, .12); border-color: rgba(83, 252, 24, .22); color: var(--kick); }
   .msg[data-source="x"] .source-icon { background: rgba(244, 246, 248, .08); border-color: rgba(244, 246, 248, .16); color: var(--x); }
+  .msg[data-source="youtube"] .source-icon { background: rgba(255, 0, 51, .12); border-color: rgba(255, 0, 51, .24); color: var(--youtube); }
 
   .msg-main { min-width: 0; }
   .msg-meta { display: flex; align-items: baseline; gap: 7px; min-width: 0; flex-wrap: wrap; }
@@ -519,6 +521,7 @@
   .msg[data-source="twitch"] .user { color: #cdb6ff; }
   .msg[data-source="kick"] .user { color: #aaff88; }
   .msg[data-source="x"] .user { color: #f3f5f7; }
+  .msg[data-source="youtube"] .user { color: #ffb8c5; }
 
   .source-label, .badge {
     height: 18px;
@@ -882,6 +885,26 @@
 
       <article class="setup-card">
         <div class="setup-card-head">
+          <div class="setup-icon" style="color:var(--youtube); background:rgba(255,0,51,.12)"></div>
+          <div><strong>YouTube</strong><small>Official live chat API</small></div>
+          <span class="status-chip" id="setupStatus-youtube">Ready</span>
+        </div>
+        <div class="setup-card-body">
+          <div class="field"><label for="youtubeUrl">Live URL / video ID / chat ID</label><input id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..."></div>
+          <div class="field"><label for="youtubeToken">API key or OAuth token</label><input id="youtubeToken" type="password" placeholder="Paste YouTube API key or OAuth access token"></div>
+          <label class="check-row"><input type="checkbox" id="rememberYoutubeToken"> Remember token on this computer</label>
+          <div class="field"><label for="youtubeRelay">Proxy URL</label><input id="youtubeRelay" value="/youtube/stream" placeholder="/youtube/stream"></div>
+          <div class="help-links">
+            <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noreferrer">Enable YouTube API</a>
+            <a href="https://developers.google.com/youtube/v3/live/docs/liveChatMessages/list" target="_blank" rel="noreferrer">Live chat docs</a>
+          </div>
+          <button class="text-btn primary" type="button" id="connectYoutube">Connect YouTube</button>
+          <p class="note" id="setupMsg-youtube">Uses YouTube's official Live Chat API and respects YouTube's polling interval. API keys work for public live chats; OAuth is better for private/owned streams.</p>
+        </div>
+      </article>
+
+      <article class="setup-card">
+        <div class="setup-card-head">
           <div class="setup-icon" style="color:var(--kick); background:rgba(83,252,24,.10)"></div>
           <div><strong>Kick</strong><small>Live channel chat</small></div>
           <span class="status-chip" id="setupStatus-kick">Ready</span>
@@ -1027,6 +1050,18 @@
 
       <details class="connector">
         <summary>
+          <span class="source-dot" style="background: var(--youtube)"></span>
+          <strong>YouTube Chat</strong>
+          <span>Official API</span>
+        </summary>
+        <div class="connector-body">
+          <button class="text-btn danger" type="button" id="disconnectYoutube">Disconnect YouTube</button>
+          <p class="note">YouTube uses the official Live Chat API through the local StreamHub relay and follows YouTube's polling interval.</p>
+        </div>
+      </details>
+
+      <details class="connector">
+        <summary>
           <span class="source-dot" style="background: var(--kick)"></span>
           <strong>Kick Chat</strong>
           <span>Local relay</span>
@@ -1052,6 +1087,11 @@ const sources = {
     color: "#f4f6f8",
     icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.24 2.25h3.31l-7.23 8.26 8.5 11.24h-6.65l-5.21-6.82-5.97 6.82H1.68l7.73-8.84L1.25 2.25h6.82l4.71 6.23 5.46-6.23Zm-1.16 17.52h1.83L7.08 4.13H5.12l11.96 15.64Z"/></svg>'
   },
+  youtube: {
+    name: "YouTube",
+    color: "#ff0033",
+    icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31.4 31.4 0 0 0 0 12a31.4 31.4 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31.4 31.4 0 0 0 24 12a31.4 31.4 0 0 0-.5-5.8ZM9.6 15.6V8.4l6.2 3.6-6.2 3.6Z"/></svg>'
+  },
   kick: {
     name: "Kick",
     color: "#53fc18",
@@ -1062,12 +1102,13 @@ const sources = {
 document.querySelectorAll(".setup-icon")[0].innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 document.querySelectorAll(".setup-icon")[1].innerHTML = sources.twitch.icon;
 document.querySelectorAll(".setup-icon")[2].innerHTML = sources.x.icon;
-document.querySelectorAll(".setup-icon")[3].innerHTML = sources.kick.icon;
+document.querySelectorAll(".setup-icon")[3].innerHTML = sources.youtube.icon;
+document.querySelectorAll(".setup-icon")[4].innerHTML = sources.kick.icon;
 
 const state = {
   messages: [],
-  counts: { twitch: 0, x: 0, kick: 0 },
-  status: { twitch: "ready", x: "ready", kick: "ready" },
+  counts: Object.fromEntries(Object.keys(sources).map((key) => [key, 0])),
+  status: Object.fromEntries(Object.keys(sources).map((key) => [key, "ready"])),
   profiles: [{ id: "stream-1", name: "elchefdesol", fields: {} }],
   activeProfileId: "stream-1",
   connectionStatus: {},
@@ -1100,6 +1141,8 @@ const setupFieldIds = [
   "xQuery",
   "xProxy",
   "xLivechatUrl",
+  "youtubeUrl",
+  "youtubeRelay",
   "kickChannel",
   "kickRoomId",
   "kickRelay",
@@ -1107,7 +1150,8 @@ const setupFieldIds = [
 ];
 const secretFieldIds = [
   ["twitchToken", "rememberTwitchToken"],
-  ["xBearer", "rememberXBearer"]
+  ["xBearer", "rememberXBearer"],
+  ["youtubeToken", "rememberYoutubeToken"]
 ];
 
 function nowTime() {
@@ -1238,6 +1282,7 @@ function addStreamProfile() {
     fields: {
       streamName: `Stream ${next}`,
       xProxy: "/x/stream",
+      youtubeRelay: "/youtube/stream",
       kickRelay: "/kick/stream"
     }
   };
@@ -1517,7 +1562,7 @@ function renderActivityBreakdowns() {
     row.className = "metric-row";
     row.innerHTML = `
       <span><strong>${escapeHtml(profile.name || "Stream")}</strong><small>${messages.length} messages · ${viewers.length ? formatNumber(viewerTotal) : "--"} viewers</small><small>${escapeHtml(platformBits)}</small></span>
-      <em>${Object.entries(state.connectionStatus).filter(([key, status]) => key.startsWith(`${profile.id}:`) && status === "live").length}/3</em>
+      <em>${Object.entries(state.connectionStatus).filter(([key, status]) => key.startsWith(`${profile.id}:`) && status === "live").length}/${sourceKeys().length}</em>
     `;
     streamList.appendChild(row);
   });
@@ -1546,10 +1591,11 @@ function renderStats() {
 
 function renderSetup() {
   const live = connectedCount();
-  document.getElementById("setupCount").textContent = `${live}/${state.profiles.length * 3}`;
+  const possible = state.profiles.length * sourceKeys().length;
+  document.getElementById("setupCount").textContent = `${live}/${possible}`;
   document.getElementById("launchHubBtn").disabled = live === 0;
   document.getElementById("setupSummary").textContent = live
-    ? `${live}/${state.profiles.length * 3} connected. Launch StreamHub when you are ready, or keep connecting more platforms.`
+    ? `${live}/${possible} connected. Launch StreamHub when you are ready, or keep connecting more platforms.`
     : "Connect at least one platform to launch the hub. Use Connect Filled Platforms to try every card with info filled in.";
 
   sourceKeys().forEach((key) => {
@@ -1594,7 +1640,8 @@ function connectSse(source, url, profileId = state.activeProfileId, streamName =
     try {
       const payload = JSON.parse(event.data);
       if (payload.viewerCount !== undefined) setViewerCount(source, profileId, payload.viewerCount, streamName);
-      setSourceStatus(source, "live", `${sources[source].name} connected for ${streamName}.`, key);
+      const waitNote = payload.nextPollMs ? ` Next poll in ${Math.round(payload.nextPollMs / 1000)}s.` : "";
+      setSourceStatus(source, "live", `${sources[source].name} connected for ${streamName}.${waitNote}`, key);
     } catch {
     }
   });
@@ -1737,6 +1784,26 @@ function connectXLivechat() {
   const url = new URL("/x/livechat/stream", window.location.origin);
   connectSse("x", url.toString(), profileId, streamName);
   setSetupMessage("x", "X livechat bridge connected. Open the X chat popout with the extension running, then send a test chat.");
+}
+
+function connectYoutube() {
+  saveSetupFields();
+  const profileId = state.activeProfileId;
+  const streamName = activeStreamName();
+  const key = connectionKey("youtube", profileId);
+  const input = document.getElementById("youtubeUrl").value.trim();
+  const token = document.getElementById("youtubeToken").value.trim();
+  const relay = document.getElementById("youtubeRelay").value.trim() || "/youtube/stream";
+  if (!input || !token) {
+    setSourceStatus("youtube", "error", "Enter a YouTube live URL/video ID and API key or OAuth access token.", key);
+    return;
+  }
+  const resolved = new URL(relay, window.location.origin);
+  if (input.startsWith("http") || input.includes("youtube.com") || input.includes("youtu.be")) resolved.searchParams.set("url", input);
+  else if (input.length > 20) resolved.searchParams.set("liveChatId", input);
+  else resolved.searchParams.set("video", input);
+  resolved.searchParams.set("token", token);
+  connectSse("youtube", resolved.toString(), profileId, streamName);
 }
 
 function disconnectSource(source, key = connectionKey(source)) {
@@ -1902,6 +1969,7 @@ async function connectAll() {
   const twitchReady = document.getElementById("twitchChannel").value.trim() && document.getElementById("twitchToken").value.trim();
   const xApiReady = document.getElementById("xQuery").value.trim() && await hasConfiguredXToken();
   const xLivechatReady = document.getElementById("xLivechatUrl").value.trim();
+  const youtubeReady = document.getElementById("youtubeUrl").value.trim() && document.getElementById("youtubeToken").value.trim();
   const kickReady = document.getElementById("kickChannel").value.trim() || document.getElementById("kickRoomId").value.trim();
 
   if (twitchReady) {
@@ -1919,6 +1987,13 @@ async function connectAll() {
     jobs.push(waitForSettled("x", connectionKey("x", profileId)));
   } else {
     setSourceStatus("x", "ready", "X skipped. Enter API details or an X livechat URL to connect it.");
+  }
+
+  if (youtubeReady) {
+    connectYoutube();
+    jobs.push(waitForSettled("youtube", connectionKey("youtube", profileId)));
+  } else {
+    setSourceStatus("youtube", "ready", "YouTube skipped. Enter a live URL and OAuth access token to connect it.");
   }
 
   if (kickReady) {
@@ -1960,7 +2035,7 @@ pauseBtn.addEventListener("click", () => {
 
 document.getElementById("clearBtn").addEventListener("click", () => {
   state.messages = [];
-  state.counts = { twitch: 0, x: 0, kick: 0 };
+  state.counts = Object.fromEntries(sourceKeys().map((key) => [key, 0]));
   state.rateWindow = [];
   state.peak = 0;
   render();
@@ -1987,6 +2062,8 @@ document.getElementById("connectXLivechat").addEventListener("click", connectXLi
 document.getElementById("openXLivechat").addEventListener("click", openXLivechat);
 document.getElementById("copyXBridgeScript").addEventListener("click", copyXBridgeScript);
 document.getElementById("disconnectX").addEventListener("click", () => disconnectSource("x"));
+document.getElementById("connectYoutube").addEventListener("click", connectYoutube);
+document.getElementById("disconnectYoutube").addEventListener("click", () => disconnectSource("youtube"));
 document.getElementById("connectKick").addEventListener("click", connectKick);
 document.getElementById("disconnectKick").addEventListener("click", () => disconnectSource("kick"));
 document.getElementById("connectTwitch").addEventListener("click", connectTwitch);

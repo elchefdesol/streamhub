@@ -1,6 +1,6 @@
 # StreamHub
 
-Unified live feed for Twitch, X, and Kick, designed to run as a local browser source in OBS or Streamlabs.
+Unified live feed for Twitch, X, YouTube, and Kick, designed to run as a local browser source in OBS or Streamlabs.
 
 ## Quick Start
 
@@ -37,7 +37,7 @@ http://127.0.0.1:3000
 3. Fill in the platform cards.
 4. Use `+ Add Stream` if you want to merge chats from a cohost or another stream.
 5. Press `Connect Filled Platforms`, or connect platforms one by one.
-6. Confirm the counter shows connected sources, for example `1/3`, `2/3`, or `4/6`.
+6. Confirm the counter shows connected sources, for example `1/4`, `2/4`, or `5/8`.
 7. Press `Launch StreamHub`.
 
 Twitch needs a chat OAuth token with `chat:read`. The channel field is the Twitch channel you want to join.
@@ -50,6 +50,8 @@ Useful links:
 - X API credits: https://docs.x.com/x-api/getting-started/pricing
 - X query syntax: https://docs.x.com/x-api/posts/search/integrate/build-a-query
 - X livechat bridge folder: `x-livechat-bridge`
+- YouTube API: https://console.cloud.google.com/apis/library/youtube.googleapis.com
+- YouTube live chat docs: https://developers.google.com/youtube/v3/live/docs/liveChatMessages/list
 
 Kick setup:
 
@@ -69,6 +71,16 @@ Then search the JSON for:
 "chatroom":{"id":
 ```
 
+YouTube setup:
+
+1. Enable the YouTube Data API v3 in Google Cloud.
+2. Get a YouTube API key, or use a YouTube OAuth access token for private/owned streams.
+3. Enter a YouTube live URL, video ID, or `liveChatId`.
+4. Leave Proxy URL as `/youtube/stream`.
+5. Press `Connect YouTube`.
+
+StreamHub uses YouTube's official Live Chat API and follows YouTube's returned `pollingIntervalMillis`, with a default minimum of 15 seconds between chat polls so an 8-hour stream is much less likely to burn through daily quota.
+
 ## Local Settings
 
 StreamHub saves non-secret setup fields in your browser on this computer, so refreshes keep your channel names, queries, proxy URLs, and Kick chatroom ID.
@@ -85,7 +97,7 @@ X_BEARER_TOKEN=your_x_bearer_token_here
 
 StreamHub uses two local browser pages while you stream:
 
-- Main app / dock: connects Twitch, X, and Kick.
+- Main app / dock: connects Twitch, X, YouTube, and Kick.
 - Overlay: transparent username + message bubbles for the actual stream scene.
 
 ### OBS Dock
@@ -162,35 +174,57 @@ The livechat bridge is experimental because it depends on X's current web page s
 
 After updating StreamHub, reload the unpacked extension from `chrome://extensions/` and refresh the X chat tab. The bridge dedupes by chat row, so repeated messages from the same user are allowed while duplicate scans of the same visible row are ignored.
 
+## How YouTube Works
+
+YouTube uses the official YouTube Live Chat API through the local StreamHub server.
+
+Paste a YouTube live URL, video ID, or direct `liveChatId`, plus a YouTube API key or OAuth access token. StreamHub resolves the active live chat, then reads messages through `/youtube/stream`.
+
+API keys are the easiest path for public live chats. OAuth tokens are useful when YouTube requires account permissions for a private, unlisted, or owned stream.
+
+The YouTube adapter respects the `pollingIntervalMillis` value returned by YouTube, but also enforces a conservative minimum interval of 15 seconds by default. That means even if YouTube says to wait 5 seconds, StreamHub waits 15 seconds to protect quota for long sessions.
+
+At 15 seconds, an 8-hour stream uses about 1,920 chat polls. That is intentionally close to the rough safe budget for a default 10,000-unit YouTube quota if chat polling costs around 5 units per request.
+
+You can override the minimum interval with:
+
+```env
+YOUTUBE_MIN_POLL_INTERVAL_MS=15000
+```
+
+Viewer count comes from `liveStreamingDetails.concurrentViewers` when YouTube returns it.
+
 ## Collab Streams
 
 StreamHub supports multiple stream slots for co-streams and collabs.
 
 1. Click `+ Add Stream`.
 2. Name the stream slot, for example `elchefdesol`, `cohost`, or `team red`.
-3. Fill in that streamer's Twitch, X, and Kick fields.
+3. Fill in that streamer's Twitch, X, YouTube, and Kick fields.
 4. Connect the slot.
 
 Messages in the hub are labeled with both the platform and the stream name:
 
 ```text
 [Twitch] [elchefdesol] viewer123: let's go
+[YouTube] [elchefdesol] fan22: hello from YT
 [Kick] [cohost] fan88: chat is moving
 ```
 
 The Activity panel breaks chat down by platform and by stream slot. Viewer counts are shown when StreamHub can fetch them:
 
 - Twitch: uses the Twitch OAuth token to validate the token's Client-ID, then reads the live stream's `viewer_count`.
+- YouTube: uses YouTube `liveStreamingDetails.concurrentViewers` when available.
 - Kick: uses Kick channel metadata when Kick returns a live `viewer_count`.
 - X: shows message activity, but viewer count is `--` because X does not expose a reliable public livechat viewer count through this bridge.
 
 ## Files
 
-- `server.mjs`: local app server and X proxy
+- `server.mjs`: local app server and platform relays
 - `streamhub-contest.html`: frontend UI and OBS overlay
 - `x-livechat-bridge/`: optional browser extension for experimental X livechat capture
 - `.env.example`: config template
 
 ## Notes
 
-Twitch can connect directly from the browser with a chat OAuth token. Kick is left as a relay adapter because reliable official real-time chat support changes more often.
+Twitch can connect directly from the browser with a chat OAuth token. YouTube and Kick use local relay adapters. X uses either the official public posts API or the optional livechat bridge.

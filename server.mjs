@@ -9,6 +9,7 @@ const ROOT = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-
 const PORT = Number(process.env.PORT || 3000);
 let bearerToken = process.env.X_BEARER_TOKEN || "";
 const DEFAULT_INTERVAL_MS = Number(process.env.X_POLL_INTERVAL_MS || 15000);
+const YOUTUBE_MIN_POLL_INTERVAL_MS = Math.max(Number(process.env.YOUTUBE_MIN_POLL_INTERVAL_MS || 15000), 1000);
 const xLivechatClients = new Set();
 const xLivechatSeen = new Set();
 const hubClients = new Set();
@@ -154,6 +155,68 @@ async function fetchTwitchViewerCount(channel, token) {
     channel: cleanChannel,
     isLive: Boolean(stream),
     viewerCount: stream?.viewer_count ?? null
+  };
+}
+
+function extractYouTubeVideoId(input) {
+  const value = String(input || "").trim();
+  if (!value) return "";
+  if (/^[A-Za-z0-9_-]{11}$/.test(value)) return value;
+  try {
+    const url = new URL(value);
+    if (url.hostname.includes("youtu.be")) return url.pathname.split("/").filter(Boolean)[0] || "";
+    if (url.searchParams.get("v")) return url.searchParams.get("v") || "";
+    const parts = url.pathname.split("/").filter(Boolean);
+    const marker = parts.findIndex((part) => ["live", "shorts", "embed"].includes(part));
+    if (marker >= 0 && parts[marker + 1]) return parts[marker + 1];
+  } catch {
+  }
+  return "";
+}
+
+function buildYouTubeRequest(url, credential) {
+  const requestUrl = new URL(url);
+  const value = String(credential || "").trim();
+  const headers = {};
+  if (value.startsWith("AIza")) {
+    requestUrl.searchParams.set("key", value);
+  } else {
+    headers.authorization = `Bearer ${value}`;
+  }
+  return { url: requestUrl.toString(), headers };
+}
+
+async function fetchYouTubeVideoMeta(videoId, credential) {
+  const request = buildYouTubeRequest(`https://www.googleapis.com/youtube/v3/videos?part=snippet,liveStreamingDetails&id=${encodeURIComponent(videoId)}`, credential);
+  const response = await fetch(request.url, { headers: request.headers });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body?.error?.message || `YouTube video lookup failed: HTTP ${response.status}`);
+  }
+  const video = body.items?.[0];
+  if (!video) throw new Error("YouTube video not found for this token.");
+  return {
+    title: video.snippet?.title || "YouTube live",
+    liveChatId: video.liveStreamingDetails?.activeLiveChatId || "",
+    viewerCount: video.liveStreamingDetails?.concurrentViewers ? Number(video.liveStreamingDetails.concurrentViewers) : null
+  };
+}
+
+function normalizeYouTubeMessage(item) {
+  const author = item.authorDetails || {};
+  const snippet = item.snippet || {};
+  const badges = [];
+  if (author.isChatOwner) badges.push("OWNER");
+  else if (author.isChatModerator) badges.push("MOD");
+  if (author.isChatSponsor) badges.push("MEMBER");
+  if (snippet.type === "superChatEvent") badges.push("SUPER");
+  return {
+    source: "youtube",
+    id: item.id,
+    user: author.displayName || "YouTube user",
+    text: snippet.displayMessage || "",
+    badge: badges.join(" "),
+    created_at: snippet.publishedAt
   };
 }
 
@@ -441,6 +504,120 @@ async function handleTwitchMeta(req, res) {
   }
 }
 
+async function handleYouTubeMeta(req, res, url) {
+  try {
+    const token = url.searchParams.get("token") || "";
+    const liveChatId = url.searchParams.get("liveChatId") || "";
+    const videoId = extractYouTubeVideoId(url.searchParams.get("video") || url.searchParams.get("url") || "");
+    if (!token) {
+      sendJson(res, 400, { error: "Missing YouTube API key or OAuth access token." });
+      return;
+    }
+    if (liveChatId) {
+      sendJson(res, 200, { source: "youtube", liveChatId, viewerCount: null });
+      return;
+    }
+    if (!videoId) {
+      sendJson(res, 400, { error: "Missing YouTube video URL or liveChatId." });
+      return;
+    }
+    const meta = await fetchYouTubeVideoMeta(videoId, token);
+    sendJson(res, 200, { source: "youtube", videoId, ...meta });
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
+}
+
+async function handleYouTubeStream(req, res, url) {
+  const token = url.searchParams.get("token")?.trim();
+  const directLiveChatId = url.searchParams.get("liveChatId")?.trim();
+  const videoInput = url.searchParams.get("video") || url.searchParams.get("url") || "";
+  const videoId = extractYouTubeVideoId(videoInput);
+
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+    "access-control-allow-origin": "*"
+  });
+
+  if (!token) {
+    sendSse(res, "error", { source: "youtube", error: "Missing YouTube API key or OAuth access token." });
+    res.end();
+    return;
+  }
+
+  let closed = false;
+  req.on("close", () => {
+    closed = true;
+  });
+
+  try {
+    const meta = directLiveChatId
+      ? { liveChatId: directLiveChatId, title: "YouTube live", viewerCount: null }
+      : await fetchYouTubeVideoMeta(videoId, token);
+    if (!meta.liveChatId) {
+      sendSse(res, "error", { source: "youtube", error: "No active YouTube liveChatId found. The stream may not be live or chat may be disabled." });
+      res.end();
+      return;
+    }
+
+    sendSse(res, "status", { source: "youtube", status: "connected", title: meta.title, liveChatId: meta.liveChatId, viewerCount: meta.viewerCount });
+
+    const seen = new Set();
+    let pageToken = "";
+    let lastViewerRefresh = 0;
+
+    async function poll() {
+      if (closed) return;
+      try {
+        const params = new URLSearchParams({
+          liveChatId: meta.liveChatId,
+          part: "snippet,authorDetails",
+          maxResults: "200"
+        });
+        if (pageToken) params.set("pageToken", pageToken);
+
+        const request = buildYouTubeRequest(`https://www.googleapis.com/youtube/v3/liveChat/messages?${params}`, token);
+        const response = await fetch(request.url, { headers: request.headers });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body?.error?.message || `YouTube chat HTTP ${response.status}`);
+
+        for (const item of body.items || []) {
+          if (!item.id || seen.has(item.id)) continue;
+          seen.add(item.id);
+          const message = normalizeYouTubeMessage(item);
+          if (message.text) sendSse(res, "message", message);
+        }
+        while (seen.size > 1000) seen.delete(seen.values().next().value);
+
+        pageToken = body.nextPageToken || pageToken;
+        if (videoId && Date.now() - lastViewerRefresh > 60000) {
+          lastViewerRefresh = Date.now();
+          try {
+            const fresh = await fetchYouTubeVideoMeta(videoId, token);
+            sendSse(res, "status", { source: "youtube", status: "connected", title: fresh.title, liveChatId: fresh.liveChatId || meta.liveChatId, viewerCount: fresh.viewerCount });
+          } catch {
+          }
+        }
+
+        const youtubeInterval = Number(body.pollingIntervalMillis || 5000);
+        const waitMs = Math.max(youtubeInterval, YOUTUBE_MIN_POLL_INTERVAL_MS);
+        sendSse(res, "status", { source: "youtube", status: "connected", title: meta.title, liveChatId: meta.liveChatId, viewerCount: meta.viewerCount, nextPollMs: waitMs });
+        setTimeout(poll, waitMs);
+      } catch (error) {
+        sendSse(res, "error", { source: "youtube", error: error.message });
+        res.end();
+      }
+    }
+
+    poll();
+  } catch (error) {
+    sendSse(res, "error", { source: "youtube", error: error.message });
+    res.end();
+  }
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
 
@@ -509,6 +686,16 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/youtube/meta") {
+    handleYouTubeMeta(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/youtube/stream") {
+    handleYouTubeStream(req, res, url);
+    return;
+  }
+
   if (url.pathname === "/x/livechat/capture.js") {
     fs.readFile(path.join(ROOT, "x-livechat-bridge", "content.js"), "utf8")
       .then((script) => {
@@ -548,7 +735,7 @@ const server = http.createServer((req, res) => {
 
   sendJson(res, 404, {
     error: "Not found",
-    endpoints: ["/health", "/hub/stream", "/hub/push", "/hub/recent", "/x/stream?query=%23YourStreamTag", "/kick/stream?channel=YourKickChannel"]
+    endpoints: ["/health", "/hub/stream", "/hub/push", "/hub/recent", "/x/stream?query=%23YourStreamTag", "/youtube/stream?url=YouTubeLiveUrl", "/kick/stream?channel=YourKickChannel"]
   });
 });
 
