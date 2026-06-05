@@ -11,6 +11,9 @@ let bearerToken = process.env.X_BEARER_TOKEN || "";
 const DEFAULT_INTERVAL_MS = Number(process.env.X_POLL_INTERVAL_MS || 15000);
 const xLivechatClients = new Set();
 const xLivechatSeen = new Set();
+const hubClients = new Set();
+const hubSeen = new Set();
+const hubRecent = [];
 
 async function loadDotEnv() {
   try {
@@ -46,6 +49,15 @@ function sendSse(res, event, payload) {
 function broadcastXLivechat(payload) {
   for (const res of xLivechatClients) {
     sendSse(res, "message", payload);
+  }
+}
+
+function broadcastHub(payload) {
+  hubRecent.push(payload);
+  if (hubRecent.length > 40) hubRecent.shift();
+  for (const res of hubClients) {
+    sendSse(res, "", payload);
+    sendSse(res, "hub", payload);
   }
 }
 
@@ -310,6 +322,60 @@ async function handleXLivechatPush(req, res) {
   }
 }
 
+async function handleHubStream(req, res) {
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+    "access-control-allow-origin": "*"
+  });
+
+  hubClients.add(res);
+  sendSse(res, "status", { ok: true, status: "connected" });
+  for (const payload of hubRecent.slice(-10)) {
+    sendSse(res, "", payload);
+    sendSse(res, "hub", payload);
+  }
+
+  req.on("close", () => {
+    hubClients.delete(res);
+  });
+}
+
+async function handleHubPush(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    const id = String(body.id || `${body.source}:${body.user}:${body.text}:${body.ts || ""}`).slice(0, 600);
+    if (hubSeen.has(id)) {
+      sendJson(res, 200, { ok: true, duplicate: true, clients: hubClients.size });
+      return;
+    }
+    hubSeen.add(id);
+    if (hubSeen.size > 3000) {
+      const first = hubSeen.values().next().value;
+      hubSeen.delete(first);
+    }
+
+    const payload = {
+      id,
+      source: body.source,
+      user: body.user || body.username || "unknown",
+      text: body.text || "",
+      badge: body.badge || "",
+      streamName: body.streamName || "",
+      ts: body.ts || Date.now()
+    };
+    broadcastHub(payload);
+    sendJson(res, 200, { ok: true, clients: hubClients.size });
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
+}
+
+async function handleHubRecent(req, res) {
+  sendJson(res, 200, { messages: hubRecent.slice(-20), clients: hubClients.size });
+}
+
 function livechatCaptureScript() {
   return `(() => {
   const endpoint = "http://127.0.0.1:${PORT}/x/livechat/push";
@@ -419,6 +485,21 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/hub/stream") {
+    handleHubStream(req, res);
+    return;
+  }
+
+  if (url.pathname === "/hub/push" && req.method === "POST") {
+    handleHubPush(req, res);
+    return;
+  }
+
+  if (url.pathname === "/hub/recent") {
+    handleHubRecent(req, res);
+    return;
+  }
+
   if (url.pathname === "/x/livechat/capture.js") {
     res.writeHead(200, {
       "content-type": "text/javascript; charset=utf-8",
@@ -431,7 +512,10 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/" || url.pathname === "/overlay" || url.pathname === "/streamhub-contest.html") {
     fs.readFile(path.join(ROOT, "streamhub-contest.html"), "utf8")
       .then((html) => {
-        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.writeHead(200, {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store"
+        });
         res.end(html);
       })
       .catch(() => sendJson(res, 500, { error: "Could not read streamhub-contest.html" }));
@@ -450,7 +534,7 @@ const server = http.createServer((req, res) => {
 
   sendJson(res, 404, {
     error: "Not found",
-    endpoints: ["/health", "/x/stream?query=%23YourStreamTag", "/x/livechat/stream", "/kick/stream?channel=YourKickChannel"]
+    endpoints: ["/health", "/hub/stream", "/hub/push", "/hub/recent", "/x/stream?query=%23YourStreamTag", "/kick/stream?channel=YourKickChannel"]
   });
 });
 

@@ -691,7 +691,7 @@
 
   body.overlay-mode .app {
     grid-template-rows: 1fr;
-    background: rgba(8, 9, 12, .72);
+    background: transparent;
   }
 
   body.overlay-mode header,
@@ -706,11 +706,65 @@
   }
 
   body.overlay-mode .feed-wrap {
-    grid-template-rows: auto 1fr;
+    grid-template-rows: 1fr;
+  }
+
+  body.overlay-mode .status-strip {
+    display: none;
   }
 
   body.overlay-mode .feed {
-    padding: 14px;
+    padding: 28px;
+    background: transparent;
+    justify-content: flex-end;
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  body.overlay-mode .empty {
+    display: none;
+  }
+
+  body.overlay-mode .msg {
+    width: min(760px, calc(100vw - 56px));
+    display: block;
+    padding: 0;
+    background: transparent;
+    border-color: transparent;
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    animation: none;
+    text-shadow: 0 2px 4px rgba(0,0,0,.92), 0 0 12px rgba(0,0,0,.72);
+  }
+
+  body.overlay-mode .msg:hover {
+    background: transparent;
+    border-color: transparent;
+  }
+
+  body.overlay-mode .source-icon,
+  body.overlay-mode .source-label,
+  body.overlay-mode .badge,
+  body.overlay-mode .time {
+    display: none;
+  }
+
+  body.overlay-mode .msg-meta {
+    display: block;
+  }
+
+  body.overlay-mode .user {
+    font-size: 1rem;
+    color: #ffffff;
+  }
+
+  body.overlay-mode .text {
+    margin-top: 2px;
+    color: #ffffff;
+    font-size: 1.08rem;
+    font-weight: 800;
+    line-height: 1.25;
   }
 </style>
 </head>
@@ -994,6 +1048,11 @@ const drawer = document.getElementById("drawer");
 const sendSource = document.getElementById("sendSource");
 const messageInput = document.getElementById("messageInput");
 const storageKey = "streamhub.setup.v1";
+let isOverlayMode = false;
+let overlayVisibleMs = 8500;
+let overlayMaxMessages = 5;
+let hubStream = null;
+let hubPoll = null;
 const setupFieldIds = [
   "streamName",
   "twitchChannel",
@@ -1176,10 +1235,11 @@ function setSourceStatus(source, status, message = "", key = connectionKey(sourc
   render();
 }
 
-function addMessage(source, user, text, badge = "", streamName = activeStreamName()) {
+function addMessage(source, user, text, badge = "", streamName = activeStreamName(), options = {}) {
   if (!sources[source]) return;
+  if (options.id && state.messages.some((message) => message.id === options.id)) return;
   const msg = {
-    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    id: options.id || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
     source,
     user: user || "unknown",
     text: text || "",
@@ -1195,6 +1255,51 @@ function addMessage(source, user, text, badge = "", streamName = activeStreamNam
   state.rateWindow.push(msg.ts);
   pruneRate();
   render();
+  if (!options.fromHub && !isOverlayMode) publishHubMessage(msg);
+}
+
+function publishHubMessage(msg) {
+  fetch("/hub/push", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(msg)
+  }).catch(() => {
+  });
+}
+
+function ingestHubMessage(msg) {
+  addMessage(msg.source, msg.user, msg.text, msg.badge || "", msg.streamName || "", { fromHub: true, id: msg.id });
+}
+
+async function pollHubRecent() {
+  try {
+    const response = await fetch("/hub/recent", { cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json();
+    (body.messages || []).forEach(ingestHubMessage);
+  } catch {
+  }
+}
+
+function subscribeHubOverlay() {
+  if (hubStream) hubStream.close();
+  if (hubPoll) clearInterval(hubPoll);
+  hubStream = new EventSource("/hub/stream");
+  const handleHubEvent = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      ingestHubMessage(msg);
+    } catch (error) {
+      console.warn("StreamHub overlay message skipped", error);
+    }
+  };
+  hubStream.onmessage = handleHubEvent;
+  hubStream.addEventListener("hub", handleHubEvent);
+  hubStream.onerror = () => {
+    console.warn("StreamHub overlay disconnected. Check that the local server is still running.");
+  };
+  pollHubRecent();
+  hubPoll = setInterval(pollHubRecent, 1000);
 }
 
 function pruneRate() {
@@ -1205,11 +1310,16 @@ function pruneRate() {
 
 function visibleMessages() {
   const q = state.search.trim().toLowerCase();
-  return state.messages.filter((msg) => {
+  let messages = state.messages.filter((msg) => {
     if (state.filter !== "all" && msg.source !== state.filter) return false;
     if (!q) return true;
     return msg.text.toLowerCase().includes(q) || msg.user.toLowerCase().includes(q);
   });
+  if (isOverlayMode) {
+    const cutoff = Date.now() - overlayVisibleMs;
+    messages = messages.filter((msg) => msg.ts >= cutoff).slice(-overlayMaxMessages);
+  }
+  return messages;
 }
 
 function messageNode(msg) {
@@ -1652,8 +1762,13 @@ render();
 
 const params = new URLSearchParams(window.location.search);
 if (params.get("overlay") === "1" || window.location.pathname === "/overlay") {
+  isOverlayMode = true;
+  overlayVisibleMs = Math.max(Number(params.get("duration") || 8.5), 2) * 1000;
+  overlayMaxMessages = Math.max(Number(params.get("max") || 5), 1);
   document.body.classList.add("overlay-mode");
   document.body.classList.remove("setup-active");
+  subscribeHubOverlay();
+  setInterval(renderFeed, 1000);
 }
 
 const initialQuery = params.get("x") || params.get("query");
