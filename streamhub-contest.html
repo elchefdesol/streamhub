@@ -7,22 +7,29 @@
 <style>
   :root {
     color-scheme: dark;
-    --bg: #08090c;
-    --panel: #11141a;
-    --panel-2: #171b24;
-    --panel-3: #1d2330;
-    --line: #2a3242;
-    --text: #f3f6fa;
-    --muted: #8d98aa;
-    --soft: #c9d0dc;
-    --accent: #18d6a3;
-    --accent-2: #7c6df2;
-    --danger: #ff6978;
+    --bg: #07090d;
+    --panel: #10141c;
+    --panel-2: #151a24;
+    --panel-3: #1b2230;
+    --surface: rgba(18, 23, 33, .86);
+    --surface-strong: rgba(24, 30, 42, .94);
+    --line: #2b3547;
+    --line-soft: rgba(255, 255, 255, .07);
+    --text: #f5f7fb;
+    --muted: #8f9bad;
+    --soft: #cdd5e2;
+    --accent: #20d6a3;
+    --accent-2: #8e7bff;
+    --gold: #f4c86d;
+    --danger: #ff667a;
+    --shadow: 0 18px 46px rgba(0, 0, 0, .34);
+    --shadow-soft: 0 10px 26px rgba(0, 0, 0, .24);
     --twitch: #9146ff;
     --kick: #53fc18;
     --x: #f4f6f8;
     --youtube: #ff0033;
     --pump: #26d07c;
+    --activity-width: 300px;
   }
 
   * { box-sizing: border-box; }
@@ -33,6 +40,7 @@
     color: var(--text);
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     overflow: hidden;
+    text-rendering: geometricPrecision;
   }
 
   button, input, select { font: inherit; }
@@ -43,8 +51,9 @@
     display: grid;
     grid-template-rows: auto auto 1fr;
     background:
-      linear-gradient(180deg, rgba(124, 109, 242, .08), transparent 230px),
-      radial-gradient(circle at 18% 0%, rgba(24, 214, 163, .10), transparent 280px),
+      linear-gradient(180deg, rgba(142, 123, 255, .10), transparent 240px),
+      linear-gradient(135deg, rgba(32, 214, 163, .09), transparent 34%),
+      linear-gradient(315deg, rgba(244, 200, 109, .04), transparent 32%),
       var(--bg);
   }
 
@@ -57,8 +66,9 @@
     inset: 0;
     z-index: 20;
     background:
-      linear-gradient(180deg, rgba(124, 109, 242, .10), transparent 260px),
-      radial-gradient(circle at 18% 0%, rgba(24, 214, 163, .12), transparent 320px),
+      linear-gradient(180deg, rgba(142, 123, 255, .12), transparent 300px),
+      linear-gradient(135deg, rgba(32, 214, 163, .10), transparent 38%),
+      linear-gradient(315deg, rgba(244, 200, 109, .05), transparent 34%),
       var(--bg);
     padding: 22px;
     overflow-y: auto;
@@ -69,12 +79,12 @@
   }
 
   .setup-shell {
-    width: min(1080px, 100%);
+    width: min(1180px, 100%);
     min-height: calc(100vh - 44px);
     margin: 0 auto;
     display: grid;
     grid-template-rows: auto 1fr auto;
-    gap: 16px;
+    gap: 18px;
   }
 
   .setup-top {
@@ -83,6 +93,7 @@
     justify-content: space-between;
     gap: 16px;
     flex-wrap: wrap;
+    padding: 4px 2px;
   }
 
   .setup-title {
@@ -93,8 +104,8 @@
 
   .setup-title h1 {
     margin: 0;
-    font-size: 1.4rem;
-    letter-spacing: .03em;
+    font-size: clamp(1.35rem, 1.1rem + .9vw, 1.95rem);
+    line-height: 1;
   }
 
   .setup-title p {
@@ -104,11 +115,12 @@
   }
 
   .setup-count {
-    border: 1px solid var(--line);
+    border: 1px solid rgba(255, 255, 255, .10);
     border-radius: 8px;
-    background: rgba(17, 20, 26, .86);
-    padding: 10px 12px;
-    min-width: 130px;
+    background: linear-gradient(180deg, rgba(27, 34, 48, .96), rgba(14, 18, 26, .92));
+    box-shadow: var(--shadow-soft);
+    padding: 12px 14px;
+    min-width: 138px;
     text-align: center;
   }
 
@@ -129,7 +141,7 @@
   .setup-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: 14px;
     align-content: start;
   }
 
@@ -142,47 +154,85 @@
 
   .profile-tab {
     min-height: 34px;
-    border: 1px solid var(--line);
+    border: 1px solid rgba(255, 255, 255, .10);
     border-radius: 8px;
-    background: rgba(17, 20, 26, .9);
+    background: rgba(8, 11, 17, .82);
     color: var(--muted);
     padding: 0 10px;
     cursor: pointer;
     font-weight: 800;
     font-size: .78rem;
+    transition: color .15s, border-color .15s, background .15s;
   }
 
   .profile-tab.active {
     color: var(--text);
-    border-color: rgba(24, 214, 163, .55);
-    background: var(--panel-3);
+    border-color: rgba(32, 214, 163, .58);
+    background: rgba(32, 214, 163, .11);
+    box-shadow: inset 0 0 0 1px rgba(32, 214, 163, .06);
   }
 
   .setup-card {
-    border: 1px solid var(--line);
+    --card-accent: rgba(255, 255, 255, .18);
+    border: 1px solid rgba(255, 255, 255, .09);
     border-radius: 8px;
-    background: rgba(17, 20, 26, .92);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, .035), transparent 76px),
+      rgba(13, 17, 25, .88);
+    box-shadow: var(--shadow-soft);
     overflow: hidden;
+    transition: transform .16s ease, border-color .16s ease, background .16s ease;
+    position: relative;
+  }
+
+  .setup-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 2px;
+    background: var(--card-accent);
+    opacity: .88;
+  }
+
+  .setup-grid .setup-card:nth-child(1) { --card-accent: var(--accent); }
+  .setup-grid .setup-card:nth-child(2) { --card-accent: var(--twitch); }
+  .setup-grid .setup-card:nth-child(3) { --card-accent: rgba(244, 246, 248, .72); }
+  .setup-grid .setup-card:nth-child(4) { --card-accent: var(--youtube); }
+  .setup-grid .setup-card:nth-child(5) { --card-accent: var(--pump); }
+  .setup-grid .setup-card:nth-child(6) { --card-accent: var(--kick); }
+
+  .setup-card > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .setup-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, .16);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, .048), transparent 84px),
+      rgba(15, 20, 30, .92);
   }
 
   .setup-card-head {
-    min-height: 58px;
-    padding: 12px;
+    min-height: 62px;
+    padding: 13px;
     display: grid;
     grid-template-columns: auto 1fr auto;
     align-items: center;
     gap: 10px;
-    border-bottom: 1px solid var(--line);
-    background: rgba(29, 35, 48, .52);
+    border-bottom: 1px solid rgba(255, 255, 255, .075);
+    background: rgba(20, 26, 38, .64);
   }
 
   .setup-icon {
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
     border-radius: 8px;
     display: grid;
     place-items: center;
-    border: 1px solid rgba(255,255,255,.1);
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05);
   }
 
   .setup-icon svg,
@@ -195,7 +245,7 @@
 
   .setup-card-head strong {
     display: block;
-    font-size: .94rem;
+    font-size: .96rem;
   }
 
   .setup-card-head small {
@@ -204,16 +254,16 @@
   }
 
   .setup-card-body {
-    padding: 12px;
+    padding: 13px;
     display: grid;
-    gap: 10px;
+    gap: 11px;
   }
 
   .status-chip {
     min-width: 86px;
     height: 24px;
     border-radius: 999px;
-    border: 1px solid var(--line);
+    border: 1px solid rgba(255, 255, 255, .10);
     display: inline-grid;
     place-items: center;
     padding: 0 8px;
@@ -228,6 +278,7 @@
     color: #05100d;
     background: var(--accent);
     border-color: transparent;
+    box-shadow: 0 0 0 4px rgba(32, 214, 163, .10);
   }
 
   .status-chip.connecting {
@@ -243,10 +294,11 @@
   }
 
   .setup-actions {
-    border: 1px solid var(--line);
+    border: 1px solid rgba(255, 255, 255, .10);
     border-radius: 8px;
-    background: rgba(17, 20, 26, .9);
-    padding: 12px;
+    background: rgba(13, 17, 25, .90);
+    box-shadow: var(--shadow-soft);
+    padding: 13px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -259,11 +311,13 @@
   }
 
   header {
-    min-height: 68px;
-    padding: 12px 18px;
-    border-bottom: 1px solid var(--line);
-    background: rgba(12, 14, 20, .9);
+    min-height: 72px;
+    padding: 13px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+    background:
+      linear-gradient(180deg, rgba(19, 24, 35, .96), rgba(10, 13, 19, .92));
     backdrop-filter: blur(18px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, .22);
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: center;
@@ -278,18 +332,21 @@
   }
 
   .mark {
-    width: 38px;
-    height: 38px;
-    border: 1px solid rgba(24, 214, 163, .45);
+    width: 40px;
+    height: 40px;
+    border: 1px solid rgba(32, 214, 163, .48);
     border-radius: 8px;
     display: grid;
     place-items: center;
-    background: linear-gradient(135deg, rgba(24, 214, 163, .18), rgba(124, 109, 242, .16));
+    background:
+      linear-gradient(135deg, rgba(32, 214, 163, .22), rgba(142, 123, 255, .18)),
+      rgba(12, 16, 24, .88);
+    box-shadow: 0 12px 30px rgba(32, 214, 163, .10), inset 0 1px 0 rgba(255, 255, 255, .08);
     flex: 0 0 auto;
   }
 
   .mark svg { width: 22px; height: 22px; }
-  .brand h1 { margin: 0; font-size: 1.15rem; line-height: 1; letter-spacing: .04em; }
+  .brand h1 { margin: 0; font-size: 1.22rem; line-height: 1; }
   .brand p { margin: 4px 0 0; color: var(--muted); font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .header-actions {
@@ -301,9 +358,9 @@
   }
 
   .pill {
-    height: 32px;
-    border: 1px solid var(--line);
-    background: rgba(23, 27, 36, .88);
+    height: 34px;
+    border: 1px solid rgba(255, 255, 255, .10);
+    background: rgba(17, 22, 32, .88);
     color: var(--soft);
     border-radius: 999px;
     padding: 0 12px;
@@ -312,6 +369,7 @@
     gap: 7px;
     font-size: .78rem;
     white-space: nowrap;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
   }
 
   .live-dot {
@@ -323,7 +381,7 @@
 
   .live-dot.on {
     background: var(--accent);
-    box-shadow: 0 0 0 5px rgba(24, 214, 163, .12);
+    box-shadow: 0 0 0 5px rgba(32, 214, 163, .12);
     animation: pulse 1.6s infinite;
   }
 
@@ -332,13 +390,14 @@
   .icon-btn, .text-btn {
     height: 34px;
     border-radius: 8px;
-    border: 1px solid var(--line);
-    background: var(--panel-2);
+    border: 1px solid rgba(255, 255, 255, .10);
+    background: linear-gradient(180deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .01)), var(--panel-2);
     color: var(--text);
     display: inline-grid;
     place-items: center;
     cursor: pointer;
-    transition: border-color .15s, transform .15s, background .15s;
+    transition: border-color .15s, transform .15s, background .15s, box-shadow .15s;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
   }
 
   .icon-btn { width: 36px; }
@@ -356,15 +415,17 @@
   }
 
   .icon-btn:hover, .text-btn:hover {
-    border-color: rgba(24, 214, 163, .55);
+    border-color: rgba(32, 214, 163, .55);
     background: var(--panel-3);
     transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, .22);
   }
 
   .text-btn.primary {
-    background: var(--accent);
+    background: linear-gradient(180deg, #28e1af, var(--accent));
     color: #05100d;
     border-color: transparent;
+    box-shadow: 0 10px 24px rgba(32, 214, 163, .16);
   }
 
   .text-btn.danger {
@@ -383,9 +444,10 @@
   }
 
   .toolbar {
-    padding: 9px 18px;
-    border-bottom: 1px solid var(--line);
-    background: rgba(17, 20, 26, .94);
+    padding: 10px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, .075);
+    background: rgba(10, 13, 19, .82);
+    backdrop-filter: blur(14px);
     display: grid;
     grid-template-columns: auto 1fr auto;
     gap: 12px;
@@ -396,23 +458,25 @@
   .tabs::-webkit-scrollbar { display: none; }
 
   .tab {
-    min-height: 34px;
+    min-height: 36px;
     border-radius: 8px;
-    border: 1px solid var(--line);
-    background: #10131a;
+    border: 1px solid rgba(255, 255, 255, .09);
+    background: rgba(15, 20, 29, .82);
     color: var(--muted);
-    padding: 0 10px;
+    padding: 0 11px;
     display: inline-flex;
     align-items: center;
     gap: 8px;
     cursor: pointer;
     white-space: nowrap;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
+    transition: color .15s, border-color .15s, background .15s;
   }
 
   .tab.active {
     color: var(--text);
-    background: var(--panel-3);
-    border-color: rgba(24, 214, 163, .55);
+    background: rgba(32, 214, 163, .10);
+    border-color: rgba(32, 214, 163, .50);
   }
 
   .tab svg,
@@ -428,7 +492,7 @@
     height: 18px;
     padding: 0 5px;
     border-radius: 999px;
-    background: rgba(124, 109, 242, .24);
+    background: rgba(142, 123, 255, .24);
     color: var(--text);
     display: inline-grid;
     place-items: center;
@@ -441,23 +505,23 @@
     max-width: 360px;
     width: 100%;
     justify-self: center;
-    height: 34px;
-    border: 1px solid var(--line);
+    height: 36px;
+    border: 1px solid rgba(255, 255, 255, .10);
     border-radius: 8px;
-    background: #0e1117;
+    background: rgba(7, 10, 15, .80);
     color: var(--text);
-    padding: 0 11px;
+    padding: 0 12px;
     outline: none;
   }
 
-  .search:focus { border-color: rgba(24, 214, 163, .6); }
+  .search:focus { border-color: rgba(32, 214, 163, .6); box-shadow: 0 0 0 3px rgba(32, 214, 163, .08); }
 
   .controls { display: flex; align-items: center; gap: 8px; }
 
   main {
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-columns: minmax(0, 1fr) 7px minmax(240px, var(--activity-width));
   }
 
   .feed-wrap {
@@ -468,9 +532,9 @@
   }
 
   .status-strip {
-    height: 34px;
-    padding: 0 18px;
-    border-bottom: 1px solid rgba(42, 50, 66, .7);
+    height: 38px;
+    padding: 0 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, .07);
     color: var(--muted);
     display: flex;
     align-items: center;
@@ -484,11 +548,13 @@
   .feed {
     min-height: 0;
     overflow-y: auto;
-    padding: 18px 14px;
+    padding: 18px 16px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    background: rgba(5, 7, 10, .38);
+    gap: 7px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, .025), transparent 180px),
+      rgba(5, 7, 10, .42);
   }
 
   .feed::-webkit-scrollbar { width: 7px; }
@@ -496,25 +562,62 @@
 
   .msg {
     display: grid;
-    grid-template-columns: 30px minmax(0, 1fr) auto;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
     align-items: start;
-    gap: 9px;
-    padding: 8px 9px;
-    border: 1px solid rgba(42, 50, 66, .34);
+    gap: 10px;
+    padding: 10px 11px;
+    border: 1px solid rgba(255, 255, 255, .07);
     border-radius: 8px;
-    background: rgba(13, 16, 22, .44);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, .028), transparent),
+      rgba(12, 16, 23, .66);
     flex: 0 0 auto;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .14);
+    position: relative;
+    overflow: hidden;
   }
 
-  .msg:hover { background: rgba(23, 27, 36, .72); border-color: rgba(42, 50, 66, .82); }
+  .msg::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: rgba(255, 255, 255, .10);
+  }
+
+  .msg[data-source="twitch"]::before { background: var(--twitch); }
+  .msg[data-source="kick"]::before { background: var(--kick); }
+  .msg[data-source="x"]::before { background: rgba(244, 246, 248, .72); }
+  .msg[data-source="youtube"]::before { background: var(--youtube); }
+  .msg[data-source="pump"]::before { background: var(--pump); }
+
+  .msg:hover {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, .04), transparent),
+      rgba(18, 23, 33, .82);
+    border-color: rgba(255, 255, 255, .13);
+  }
+
+  .msg.activity {
+    background:
+      linear-gradient(180deg, rgba(32, 214, 163, .09), transparent),
+      rgba(12, 21, 20, .72);
+    border-color: rgba(32, 214, 163, .28);
+  }
+
+  .msg.activity .text {
+    color: #d7fff1;
+    font-weight: 800;
+  }
 
   .source-icon {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     border-radius: 8px;
     display: grid;
     place-items: center;
     border: 1px solid transparent;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05);
   }
 
   .source-icon svg,
@@ -563,57 +666,118 @@
   .time { color: var(--muted); font-size: .72rem; font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 2px; }
 
   .composer {
-    min-height: 58px;
-    border-top: 1px solid var(--line);
-    background: rgba(17, 20, 26, .96);
+    min-height: 62px;
+    border-top: 1px solid rgba(255, 255, 255, .08);
+    background: rgba(10, 13, 19, .96);
     display: grid;
     grid-template-columns: 128px minmax(0, 1fr) auto;
     gap: 9px;
     align-items: center;
-    padding: 10px 14px;
+    padding: 11px 16px;
   }
 
   .composer select, .composer input {
-    height: 38px;
-    border: 1px solid var(--line);
+    height: 40px;
+    border: 1px solid rgba(255, 255, 255, .10);
     border-radius: 8px;
-    background: #0e1117;
+    background: rgba(7, 10, 15, .86);
     color: var(--text);
-    padding: 0 10px;
+    padding: 0 11px;
     outline: none;
   }
 
-  .composer input:focus, .composer select:focus { border-color: rgba(24, 214, 163, .62); }
+  .composer input:focus, .composer select:focus { border-color: rgba(32, 214, 163, .62); box-shadow: 0 0 0 3px rgba(32, 214, 163, .08); }
+
+  .panel-resizer {
+    min-height: 0;
+    border-left: 1px solid rgba(255, 255, 255, .07);
+    border-right: 1px solid rgba(0, 0, 0, .26);
+    background: rgba(11, 14, 20, .72);
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .panel-resizer::before {
+    content: "";
+    display: block;
+    width: 3px;
+    height: 42px;
+    margin: 42px auto 0;
+    border-radius: 999px;
+    background: rgba(141, 152, 170, .38);
+  }
+
+  .panel-resizer:hover,
+  body.resizing-panel .panel-resizer {
+    background: rgba(32, 214, 163, .10);
+  }
 
   aside {
     min-width: 0;
     min-height: 0;
-    border-left: 1px solid var(--line);
-    background: rgba(15, 18, 24, .88);
+    border-left: 1px solid rgba(255, 255, 255, .08);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, .035), transparent 220px),
+      rgba(12, 16, 24, .90);
     display: grid;
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto 1fr;
+    overflow-y: auto;
+    scrollbar-width: thin;
   }
 
-  .panel-section { padding: 14px; border-bottom: 1px solid var(--line); }
-  .section-title { margin: 0 0 10px; color: var(--muted); font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+  .panel-section { padding: 15px; border-bottom: 1px solid rgba(255, 255, 255, .075); }
+  .panel-section.scroll-section { border-bottom: 0; padding-top: 10px; }
+  .section-title { margin: 0 0 10px; color: #aab5c7; font-size: .72rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
 
   .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .stat { min-height: 66px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 9px; }
-  .stat b { display: block; font-size: 1.35rem; line-height: 1; font-variant-numeric: tabular-nums; }
+  .stat {
+    min-height: 68px;
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 8px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, .04), transparent), rgba(8, 11, 17, .70);
+    padding: 10px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+  }
+  .stat b { display: block; font-size: 1.42rem; line-height: 1; font-variant-numeric: tabular-nums; color: #ffffff; }
   .stat span { display: block; margin-top: 6px; color: var(--muted); font-size: .72rem; }
 
+  .event-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .event-summary .event-pill {
+    min-width: 0;
+    text-align: center;
+    padding: 5px 4px;
+    background: rgba(32, 214, 163, .09);
+    border: 1px solid rgba(32, 214, 163, .20);
+  }
+
   .source-list { display: grid; gap: 7px; }
-  .source-row { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 9px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; }
+  .source-row {
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 8px;
+    background: rgba(8, 11, 17, .66);
+    padding: 10px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 9px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
+  }
   .source-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); }
-  .source-row.live .source-dot { background: var(--accent); box-shadow: 0 0 0 4px rgba(24, 214, 163, .10); }
+  .source-row.live .source-dot { background: var(--accent); box-shadow: 0 0 0 4px rgba(32, 214, 163, .10); }
   .source-row.error .source-dot { background: var(--danger); box-shadow: 0 0 0 4px rgba(255, 105, 120, .10); }
   .source-row strong { display: block; font-size: .82rem; }
   .source-row small { color: var(--muted); font-size: .7rem; }
   .source-row em { color: var(--soft); font-style: normal; font-size: .78rem; font-variant-numeric: tabular-nums; }
 
   .mini-title {
-    margin: 14px 0 7px;
-    color: var(--muted);
+    margin: 15px 0 8px;
+    color: #aab5c7;
     font-size: .68rem;
     font-weight: 900;
     letter-spacing: .08em;
@@ -622,19 +786,51 @@
 
   .metric-list { display: grid; gap: 7px; }
   .metric-row {
-    border: 1px solid var(--line);
+    border: 1px solid rgba(255, 255, 255, .09);
     border-radius: 8px;
-    background: var(--panel);
-    padding: 9px;
+    background: rgba(8, 11, 17, .66);
+    padding: 10px;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
   }
 
   .metric-row strong { display: block; font-size: .8rem; overflow-wrap: anywhere; }
   .metric-row small { display: block; color: var(--muted); font-size: .68rem; margin-top: 2px; }
   .metric-row em { color: var(--soft); font-style: normal; font-size: .74rem; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .metric-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .metric-title svg,
+  .metric-title img {
+    width: 14px;
+    height: 14px;
+    display: block;
+    object-fit: contain;
+  }
+
+  .event-grid {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 5px;
+  }
+
+  .event-pill {
+    border-radius: 999px;
+    padding: 2px 7px;
+    background: rgba(255,255,255,.065);
+    color: var(--soft);
+    font-size: .64rem;
+    font-weight: 800;
+    border: 1px solid rgba(255, 255, 255, .06);
+  }
 
   .connection-panel { min-height: 0; overflow-y: auto; padding: 14px; }
   .note { color: var(--muted); font-size: .72rem; line-height: 1.38; }
@@ -649,11 +845,11 @@
   .help-links a,
   .help-links button {
     min-height: 26px;
-    border: 1px solid var(--line);
+    border: 1px solid rgba(255, 255, 255, .10);
     border-radius: 999px;
     padding: 5px 9px;
     color: var(--soft);
-    background: rgba(255,255,255,.03);
+    background: rgba(255,255,255,.045);
     font-size: .7rem;
     font-weight: 800;
     text-decoration: none;
@@ -662,7 +858,7 @@
 
   .help-links a:hover,
   .help-links button:hover {
-    border-color: rgba(24, 214, 163, .5);
+    border-color: rgba(32, 214, 163, .5);
     color: var(--accent);
   }
 
@@ -677,21 +873,46 @@
   }
 
   .drawer.open { display: flex; }
-  .drawer-card { width: min(430px, 100vw); height: 100%; background: var(--panel); border-left: 1px solid var(--line); box-shadow: 0 18px 60px rgba(0,0,0,.38); display: grid; grid-template-rows: auto 1fr; }
-  .drawer-head { padding: 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .drawer-card {
+    width: min(440px, 100vw);
+    height: 100%;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, .04), transparent 180px),
+      var(--panel);
+    border-left: 1px solid rgba(255, 255, 255, .10);
+    box-shadow: 0 18px 60px rgba(0,0,0,.38);
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+  .drawer-head { padding: 15px; border-bottom: 1px solid rgba(255, 255, 255, .08); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .drawer-head h2 { margin: 0; font-size: 1rem; }
 
-  .connector { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 9px; overflow: hidden; }
+  .connector {
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 8px;
+    background: rgba(10, 13, 19, .78);
+    margin-bottom: 9px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
+  }
   .connector summary { cursor: pointer; padding: 11px; list-style: none; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; }
   .connector summary::-webkit-details-marker { display: none; }
   .connector summary strong { font-size: .84rem; }
   .connector summary span { color: var(--muted); font-size: .72rem; }
-  .connector-body { border-top: 1px solid var(--line); padding: 11px; display: grid; gap: 9px; }
+  .connector-body { border-top: 1px solid rgba(255, 255, 255, .08); padding: 11px; display: grid; gap: 9px; }
 
   .field { display: grid; gap: 5px; }
-  .field label { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-  .field input { height: 34px; border: 1px solid var(--line); border-radius: 8px; background: #0e1117; color: var(--text); padding: 0 9px; outline: none; }
-  .field input:focus { border-color: rgba(24, 214, 163, .62); }
+  .field label { color: #aab5c7; font-size: .68rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+  .field input {
+    height: 36px;
+    border: 1px solid rgba(255, 255, 255, .10);
+    border-radius: 8px;
+    background: rgba(7, 10, 15, .84);
+    color: var(--text);
+    padding: 0 10px;
+    outline: none;
+  }
+  .field input:focus { border-color: rgba(32, 214, 163, .62); box-shadow: 0 0 0 3px rgba(32, 214, 163, .08); }
 
   .check-row {
     display: flex;
@@ -715,12 +936,17 @@
     max-width: 390px;
     padding: 40px 20px;
     line-height: 1.45;
+    border: 1px dashed rgba(255, 255, 255, .12);
+    border-radius: 8px;
+    background: rgba(8, 11, 17, .42);
   }
 
   @media (max-width: 900px) {
     .setup-grid { grid-template-columns: 1fr; }
-    main { grid-template-columns: 1fr; }
-    aside { display: none; }
+    main { grid-template-columns: 1fr; overflow-y: auto; }
+    .feed-wrap { min-height: 520px; }
+    .panel-resizer { display: none; }
+    aside { min-height: 360px; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
     .toolbar { grid-template-columns: 1fr; }
     .search { justify-self: stretch; max-width: none; }
     .controls { justify-content: space-between; }
@@ -751,6 +977,10 @@
 
   body.overlay-mode main {
     grid-template-columns: 1fr;
+  }
+
+  body.overlay-mode .panel-resizer {
+    display: none;
   }
 
   body.overlay-mode .feed-wrap {
@@ -784,6 +1014,10 @@
     backdrop-filter: none;
     animation: none;
     text-shadow: 0 2px 4px rgba(0,0,0,.92), 0 0 12px rgba(0,0,0,.72);
+  }
+
+  body.overlay-mode .msg::before {
+    display: none;
   }
 
   body.overlay-mode .msg:hover {
@@ -906,7 +1140,7 @@
             <a href="https://dev.twitch.tv/docs/authentication/scopes/" target="_blank" rel="noreferrer">Twitch scopes</a>
           </div>
           <button class="text-btn primary" type="button" id="connectTwitch">Connect Twitch</button>
-          <p class="note" id="setupMsg-twitch">Use a Twitch chat OAuth token with chat:read permission.</p>
+          <p class="note" id="setupMsg-twitch">Use a Twitch OAuth token with <code>chat:read</code> for chat and <code>moderator:read:followers</code> for follow alerts. Add <code>channel:read:subscriptions</code> for sub alerts.</p>
         </div>
       </article>
 
@@ -1060,6 +1294,7 @@
       </form>
     </section>
 
+    <div class="panel-resizer" id="panelResizer" title="Drag to resize Activity panel" aria-hidden="true"></div>
     <aside aria-label="Activity summary">
       <section class="panel-section">
         <h2 class="section-title">Activity</h2>
@@ -1069,8 +1304,13 @@
           <div class="stat"><b id="statPeak">0</b><span>Peak burst</span></div>
           <div class="stat"><b id="statViewers">--</b><span>Viewers</span></div>
         </div>
+        <div class="event-summary" id="activityEventSummary" aria-label="Stream event totals"></div>
+      </section>
+      <section class="panel-section scroll-section">
         <h3 class="mini-title">By platform</h3>
         <div class="metric-list" id="activityByPlatform"></div>
+        <h3 class="mini-title">Stream events</h3>
+        <div class="metric-list" id="activityEventsByPlatform"></div>
         <h3 class="mini-title">By stream</h3>
         <div class="metric-list" id="activityByStream"></div>
       </section>
@@ -1199,6 +1439,7 @@ document.querySelectorAll(".setup-icon")[5].innerHTML = sources.kick.icon;
 const state = {
   messages: [],
   counts: Object.fromEntries(Object.keys(sources).map((key) => [key, 0])),
+  activityCounts: Object.fromEntries(Object.keys(sources).map((key) => [key, 0])),
   status: Object.fromEntries(Object.keys(sources).map((key) => [key, "ready"])),
   profiles: [{ id: "stream-1", name: "elchefdesol", fields: {} }],
   activeProfileId: "stream-1",
@@ -1227,6 +1468,8 @@ let overlayVisibleMs = 8500;
 let overlayMaxMessages = 5;
 let hubStream = null;
 let hubPoll = null;
+const overlaySeen = new Map();
+let activityHubStream = null;
 const setupFieldIds = [
   "streamName",
   "twitchChannel",
@@ -1274,6 +1517,55 @@ function readStoredSetup() {
 function writeStoredSetup(patch = {}) {
   const current = readStoredSetup();
   localStorage.setItem(storageKey, JSON.stringify({ ...current, ...patch }));
+}
+
+function clampActivityWidth(width) {
+  const viewportMax = Math.max(250, Math.min(window.innerWidth - 320, 520));
+  return Math.max(240, Math.min(width, viewportMax));
+}
+
+function setActivityWidth(width, persist = false) {
+  const nextWidth = clampActivityWidth(width);
+  document.documentElement.style.setProperty("--activity-width", `${nextWidth}px`);
+  if (persist) writeStoredSetup({ activityWidth: nextWidth });
+}
+
+function restoreActivityWidth() {
+  const stored = Number(readStoredSetup().activityWidth);
+  if (Number.isFinite(stored)) setActivityWidth(stored);
+}
+
+function bindActivityResize() {
+  const resizer = document.getElementById("panelResizer");
+  if (!resizer) return;
+  let startX = 0;
+  let startWidth = 300;
+
+  resizer.addEventListener("pointerdown", (event) => {
+    startX = event.clientX;
+    startWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--activity-width")) || 300;
+    document.body.classList.add("resizing-panel");
+    resizer.setPointerCapture(event.pointerId);
+  });
+
+  resizer.addEventListener("pointermove", (event) => {
+    if (!document.body.classList.contains("resizing-panel")) return;
+    setActivityWidth(startWidth - (event.clientX - startX));
+  });
+
+  resizer.addEventListener("pointerup", (event) => {
+    if (!document.body.classList.contains("resizing-panel")) return;
+    document.body.classList.remove("resizing-panel");
+    resizer.releasePointerCapture(event.pointerId);
+    const width = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--activity-width")) || startWidth;
+    setActivityWidth(width, true);
+  });
+
+  resizer.addEventListener("dblclick", () => setActivityWidth(300, true));
+  window.addEventListener("resize", () => {
+    const width = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--activity-width")) || 300;
+    setActivityWidth(width);
+  });
 }
 
 function saveSetupFields() {
@@ -1407,6 +1699,27 @@ function viewerCountForKey(key) {
   return Number.isFinite(count) ? count : null;
 }
 
+function activityKind(event = "") {
+  const value = String(event || "").toLowerCase();
+  if (["follow", "channel.follow"].includes(value)) return "follow";
+  if (["sub", "subscribe", "subscription", "channel.subscribe", "newsponsorevent", "member"].includes(value.replace(/\s+/g, ""))) return "sub";
+  if (value.includes("sponsor") || value.includes("member")) return "sub";
+  if (value.includes("super") || value.includes("paid")) return "paid";
+  if (value.includes("raid")) return "raid";
+  return value || "event";
+}
+
+function activitySummary(source) {
+  const events = state.messages.filter((msg) => msg.source === source && msg.type === "activity");
+  const summary = { total: events.length, follow: 0, sub: 0, paid: 0, raid: 0, other: 0 };
+  events.forEach((msg) => {
+    const kind = activityKind(msg.event || msg.badge || msg.text);
+    if (summary[kind] !== undefined) summary[kind] += 1;
+    else summary.other += 1;
+  });
+  return summary;
+}
+
 function setViewerCount(source, profileId, count, label = "") {
   const key = connectionKey(source, profileId);
   state.viewerCounts[key] = {
@@ -1459,9 +1772,13 @@ function addMessage(source, user, text, badge = "", streamName = activeStreamNam
   if (options.id && state.messages.some((message) => message.id === options.id)) return;
   const ts = Number.isFinite(options.ts) ? options.ts : Date.now();
   const profileId = options.profileId || state.activeProfileId;
+  const type = options.type || "chat";
   const msg = {
     id: options.id || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
     source,
+    type,
+    event: options.event || "",
+    overlay: options.overlay !== false,
     user: user || "unknown",
     text: text || "",
     badge,
@@ -1473,8 +1790,9 @@ function addMessage(source, user, text, badge = "", streamName = activeStreamNam
 
   state.messages.push(msg);
   if (state.messages.length > 1200) state.messages.shift();
-  state.counts[source] += 1;
-  state.rateWindow.push(msg.ts);
+  if (type === "activity") state.activityCounts[source] += 1;
+  else state.counts[source] += 1;
+  if (type !== "activity") state.rateWindow.push(msg.ts);
   pruneRate();
   render();
   if (!options.fromHub && !isOverlayMode) publishHubMessage(msg);
@@ -1489,8 +1807,40 @@ function publishHubMessage(msg) {
   });
 }
 
+function hubFingerprint(msg) {
+  return [
+    msg.type || "chat",
+    msg.event || "",
+    msg.source || "",
+    msg.user || msg.username || "",
+    msg.text || "",
+    msg.badge || "",
+    msg.streamName || "",
+    msg.profileId || ""
+  ].join("\u001f").toLowerCase();
+}
+
 function ingestHubMessage(msg) {
-  addMessage(msg.source, msg.user, msg.text, msg.badge || "", msg.streamName || "", { fromHub: true, id: msg.id, ts: msg.ts, profileId: msg.profileId });
+  if (isOverlayMode) {
+    const now = Date.now();
+    const id = String(msg.id || "");
+    const fingerprint = hubFingerprint(msg);
+    for (const [key, ts] of overlaySeen) {
+      if (now - ts > 10000) overlaySeen.delete(key);
+    }
+    if ((id && overlaySeen.has(`id:${id}`)) || overlaySeen.has(`fp:${fingerprint}`)) return;
+    if (id) overlaySeen.set(`id:${id}`, now);
+    overlaySeen.set(`fp:${fingerprint}`, now);
+  }
+  addMessage(msg.source, msg.user, msg.text, msg.badge || "", msg.streamName || "", {
+    fromHub: true,
+    id: msg.id,
+    ts: msg.ts,
+    profileId: msg.profileId,
+    type: msg.type || "chat",
+    event: msg.event || "",
+    overlay: msg.overlay !== false
+  });
 }
 
 async function pollHubRecent() {
@@ -1515,13 +1865,29 @@ function subscribeHubOverlay() {
       console.warn("StreamHub overlay message skipped", error);
     }
   };
-  hubStream.onmessage = handleHubEvent;
   hubStream.addEventListener("hub", handleHubEvent);
   hubStream.onerror = () => {
     console.warn("StreamHub overlay disconnected. Check that the local server is still running.");
   };
   pollHubRecent();
-  hubPoll = setInterval(pollHubRecent, 1000);
+}
+
+function subscribeHubActivityInbox() {
+  if (activityHubStream) activityHubStream.close();
+  activityHubStream = new EventSource("/hub/stream");
+  const handleActivityEvent = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.type === "activity") ingestHubMessage(msg);
+    } catch (error) {
+      console.warn("StreamHub activity event skipped", error);
+    }
+  };
+  activityHubStream.addEventListener("hub", handleActivityEvent);
+  activityHubStream.onerror = () => {
+    console.warn("StreamHub activity inbox disconnected. Check that the local server is still running.");
+  };
+  pollHubRecent();
 }
 
 function pruneRate() {
@@ -1539,7 +1905,7 @@ function visibleMessages() {
   });
   if (isOverlayMode) {
     const cutoff = Date.now() - overlayVisibleMs;
-    messages = messages.filter((msg) => msg.ts >= cutoff).slice(-overlayMaxMessages);
+    messages = messages.filter((msg) => msg.type !== "activity" && msg.overlay !== false && msg.ts >= cutoff).slice(-overlayMaxMessages);
   }
   return messages;
 }
@@ -1549,7 +1915,7 @@ function messageNode(msg) {
   const badge = msg.badge ? `<span class="badge">${escapeHtml(msg.badge)}</span>` : "";
   const streamBadge = msg.streamName ? `<span class="badge stream-badge">${escapeHtml(msg.streamName)}</span>` : "";
   const node = document.createElement("article");
-  node.className = "msg";
+  node.className = `msg ${msg.type === "activity" ? "activity" : ""}`;
   node.dataset.source = msg.source;
   node.dataset.id = msg.id;
   node.innerHTML = `
@@ -1558,7 +1924,7 @@ function messageNode(msg) {
       <div class="msg-meta">
         <span class="meta-platform-icon" aria-hidden="true">${src.icon}</span>
         <span class="user">${escapeHtml(msg.user)}</span>
-        <span class="source-label">${src.name}</span>
+        <span class="source-label">${msg.type === "activity" ? "Activity" : src.name}</span>
         ${streamBadge}
         ${badge}
       </div>
@@ -1615,11 +1981,12 @@ function renderTabs() {
   tabs.innerHTML = `<button class="tab ${state.filter === "all" ? "active" : ""}" type="button" data-filter="all">All <span class="tab-count">${total}</span></button>`;
   sourceKeys().forEach((key) => {
     const src = sources[key];
+    const count = state.counts[key] + state.activityCounts[key];
     tabs.insertAdjacentHTML("beforeend", `
       <button class="tab ${state.filter === key ? "active" : ""}" type="button" data-filter="${key}">
         <span style="color:${src.color}">${src.icon}</span>
         ${src.name}
-        <span class="tab-count">${state.counts[key]}</span>
+        <span class="tab-count">${count}</span>
       </button>
     `);
   });
@@ -1640,7 +2007,7 @@ function renderSources() {
     row.innerHTML = `
       <span class="source-dot" style="${status === "ready" ? `background:${src.color}; opacity:.38` : ""}"></span>
       <span><strong>${src.name}</strong><small>${escapeHtml(status)} · viewers ${viewerValues.length ? formatNumber(viewerTotal) : "--"}</small></span>
-      <em>${state.counts[key]}</em>
+      <em>${state.counts[key] + state.activityCounts[key]}</em>
     `;
     list.appendChild(row);
   });
@@ -1648,8 +2015,26 @@ function renderSources() {
 
 function renderActivityBreakdowns() {
   const platformList = document.getElementById("activityByPlatform");
+  const eventSummary = document.getElementById("activityEventSummary");
+  const eventsList = document.getElementById("activityEventsByPlatform");
   const streamList = document.getElementById("activityByStream");
-  if (!platformList || !streamList) return;
+  if (!platformList || !eventSummary || !eventsList || !streamList) return;
+
+  const totals = sourceKeys().reduce((acc, source) => {
+    const summary = activitySummary(source);
+    acc.follow += summary.follow;
+    acc.sub += summary.sub;
+    acc.paid += summary.paid;
+    acc.raid += summary.raid;
+    return acc;
+  }, { follow: 0, sub: 0, paid: 0, raid: 0 });
+
+  eventSummary.innerHTML = `
+    <span class="event-pill">Follows ${totals.follow}</span>
+    <span class="event-pill">Subs ${totals.sub}</span>
+    <span class="event-pill">Paid ${totals.paid}</span>
+    <span class="event-pill">Raids ${totals.raid}</span>
+  `;
 
   platformList.innerHTML = "";
   sourceKeys().forEach((source) => {
@@ -1657,34 +2042,60 @@ function renderActivityBreakdowns() {
       .filter(([key, item]) => item.source === source && state.connectionStatus[key] === "live" && Number.isFinite(item.count))
       .map(([, item]) => item.count);
     const viewerTotal = viewerValues.reduce((sum, count) => sum + count, 0);
-    const count = state.messages.filter((msg) => msg.source === source).length;
+    const chatCount = state.messages.filter((msg) => msg.source === source && msg.type !== "activity").length;
+    const eventCount = state.messages.filter((msg) => msg.source === source && msg.type === "activity").length;
     const row = document.createElement("div");
     row.className = "metric-row";
     row.innerHTML = `
-      <span><strong>${sources[source].name}</strong><small>${count} messages · ${viewerValues.length ? formatNumber(viewerTotal) : "--"} viewers</small></span>
+      <span><strong>${sources[source].name}</strong><small>${chatCount} messages · ${eventCount} events · ${viewerValues.length ? formatNumber(viewerTotal) : "--"} viewers</small></span>
       <em>${state.status[source]}</em>
     `;
     platformList.appendChild(row);
   });
 
+  eventsList.innerHTML = "";
+  sourceKeys().forEach((source) => {
+    const src = sources[source];
+    const summary = activitySummary(source);
+    const row = document.createElement("div");
+    row.className = "metric-row";
+    row.innerHTML = `
+      <span>
+        <strong class="metric-title"><span style="color:${src.color}">${src.icon}</span>${src.name}</strong>
+        <small>${summary.total} stream events</small>
+        <span class="event-grid">
+          <span class="event-pill">Follows ${summary.follow}</span>
+          <span class="event-pill">Subs ${summary.sub}</span>
+          <span class="event-pill">Paid ${summary.paid}</span>
+          <span class="event-pill">Raids ${summary.raid}</span>
+        </span>
+      </span>
+      <em>${summary.total}</em>
+    `;
+    eventsList.appendChild(row);
+  });
+
   streamList.innerHTML = "";
   state.profiles.forEach((profile) => {
     const messages = state.messages.filter((msg) => (msg.profileId || "") === profile.id || (!msg.profileId && msg.streamName === profile.name));
+    const events = messages.filter((msg) => msg.type === "activity").length;
+    const chats = messages.length - events;
     const viewers = sourceKeys()
       .map((source) => viewerCountForKey(connectionKey(source, profile.id)))
       .filter(Number.isFinite);
     const viewerTotal = viewers.reduce((sum, value) => sum + value, 0);
     const platformBits = sourceKeys()
       .map((source) => {
-        const sourceMessages = messages.filter((msg) => msg.source === source).length;
+        const sourceMessages = messages.filter((msg) => msg.source === source && msg.type !== "activity").length;
+        const sourceEvents = messages.filter((msg) => msg.source === source && msg.type === "activity").length;
         const sourceViewers = viewerCountForKey(connectionKey(source, profile.id));
-        return `${sources[source].name} ${sourceMessages}${Number.isFinite(sourceViewers) ? `/${formatNumber(sourceViewers)}v` : ""}`;
+        return `${sources[source].name} ${sourceMessages}${sourceEvents ? `+${sourceEvents}e` : ""}${Number.isFinite(sourceViewers) ? `/${formatNumber(sourceViewers)}v` : ""}`;
       })
       .join(" · ");
     const row = document.createElement("div");
     row.className = "metric-row";
     row.innerHTML = `
-      <span><strong>${escapeHtml(profile.name || "Stream")}</strong><small>${messages.length} messages · ${viewers.length ? formatNumber(viewerTotal) : "--"} viewers</small><small>${escapeHtml(platformBits)}</small></span>
+      <span><strong>${escapeHtml(profile.name || "Stream")}</strong><small>${chats} messages · ${events} events · ${viewers.length ? formatNumber(viewerTotal) : "--"} viewers</small><small>${escapeHtml(platformBits)}</small></span>
       <em>${Object.entries(state.connectionStatus).filter(([key, status]) => key.startsWith(`${profile.id}:`) && status === "live").length}/${sourceKeys().length}</em>
     `;
     streamList.appendChild(row);
@@ -1776,7 +2187,10 @@ function connectSse(source, url, profileId = state.activeProfileId, streamName =
       addMessage(payload.source || source, payload.user || payload.username, payload.text, payload.badge || "", payload.streamName || streamName, {
         id: payload.id,
         ts: payload.ts || (payload.created_at ? Date.parse(payload.created_at) : undefined),
-        profileId
+        profileId,
+        type: payload.type || "chat",
+        event: payload.event || "",
+        overlay: payload.overlay !== false
       });
     } catch (error) {
       addMessage(source, "system", event.data, "RAW", streamName, { profileId });
@@ -1986,6 +2400,14 @@ function disconnectSource(source, key = connectionKey(source)) {
     if (typeof stream.close === "function") stream.close();
     state.streams[key] = null;
   }
+  if (source === "twitch") {
+    const profileId = key.split(":")[0] || state.activeProfileId;
+    fetch("/twitch/eventsub/stop", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ profileId })
+    }).catch(() => {});
+  }
   clearViewerTimer(key);
   delete state.viewerCounts[key];
   setSourceStatus(source, "ready", `${sources[source].name} disconnected.`, key);
@@ -2026,6 +2448,7 @@ function connectTwitch() {
   setSourceStatus("twitch", "connecting", `Connecting ${streamName} to Twitch #${channel}...`, key);
   const ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
   state.streams[key] = ws;
+  let twitchReady = false;
 
   ws.addEventListener("open", () => {
     ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands");
@@ -2051,9 +2474,11 @@ function connectTwitch() {
         setSourceStatus("twitch", "error", "Twitch refused the channel. Check the channel name.", key);
         return;
       }
-      if (line.includes("001") || line.includes(`JOIN #${channel}`)) {
+      if (!twitchReady && (line.includes("001") || line.includes(`JOIN #${channel}`))) {
+        twitchReady = true;
         setSourceStatus("twitch", "live", `Connected ${streamName} to Twitch #${channel}. Waiting for chat messages.`, key);
         startTwitchViewerPolling(profileId, channel, token);
+        startTwitchEventSub(profileId, streamName, channel, token);
       }
       if (!line.includes("PRIVMSG")) return;
       const tagStr = line.startsWith("@") ? line.split(" :")[0].slice(1) : "";
@@ -2078,6 +2503,25 @@ function connectTwitch() {
       setSourceStatus("twitch", "ready", "Twitch disconnected.", key);
     }
   });
+}
+
+async function startTwitchEventSub(profileId, streamName, channel, token) {
+  try {
+    const response = await fetch("/twitch/eventsub/start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ profileId, streamName, channel, token })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setSetupMessage("twitch", body.error || "Twitch chat connected, but follow events did not connect.");
+      return;
+    }
+    const hasSubs = body.subscriptions?.includes("channel.subscribe");
+    setSetupMessage("twitch", `Twitch chat and follow events connected.${hasSubs ? " Sub events connected too." : " Add channel:read:subscriptions for sub events."}`);
+  } catch {
+    setSetupMessage("twitch", "Twitch chat connected, but EventSub could not start.");
+  }
 }
 
 async function updateKickViewerCount(profileId, channel) {
@@ -2218,6 +2662,9 @@ pauseBtn.addEventListener("click", () => {
 document.getElementById("clearBtn").addEventListener("click", () => {
   state.messages = [];
   state.counts = Object.fromEntries(sourceKeys().map((key) => [key, 0]));
+  state.activityCounts = Object.fromEntries(sourceKeys().map((key) => [key, 0]));
+  feedNodeCache.forEach((node) => node.remove());
+  feedNodeCache.clear();
   state.rateWindow = [];
   state.peak = 0;
   render();
@@ -2267,7 +2714,9 @@ document.getElementById("composer").addEventListener("submit", (event) => {
 });
 
 restoreSetupFields();
+restoreActivityWidth();
 bindSetupPersistence();
+bindActivityResize();
 renderSendOptions();
 render();
 
@@ -2280,6 +2729,8 @@ if (params.get("overlay") === "1" || window.location.pathname === "/overlay") {
   document.body.classList.remove("setup-active");
   subscribeHubOverlay();
   setInterval(renderFeed, 1000);
+} else {
+  subscribeHubActivityInbox();
 }
 
 const initialQuery = params.get("x") || params.get("query");

@@ -17,6 +17,7 @@ const pumpLivechatSeen = new Set();
 const hubClients = new Set();
 const hubSeen = new Set();
 const hubRecent = [];
+const twitchEventSubs = new Map();
 
 const assetTypes = new Map([
   [".svg", "image/svg+xml; charset=utf-8"],
@@ -46,7 +47,7 @@ function sendJson(res, status, body) {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
     "access-control-allow-headers": "content-type"
   });
   res.end(JSON.stringify(body, null, 2));
@@ -96,7 +97,6 @@ function broadcastHub(payload) {
   hubRecent.push(payload);
   if (hubRecent.length > 40) hubRecent.shift();
   for (const res of hubClients) {
-    sendSse(res, "", payload);
     sendSse(res, "hub", payload);
   }
 }
@@ -170,6 +170,17 @@ async function fetchTwitchViewerCount(channel, token) {
   const cleanChannel = String(channel || "").trim().replace(/^@/, "").toLowerCase();
   if (!cleanChannel || !cleanToken) throw new Error("Missing Twitch channel or OAuth token.");
 
+  const validateBody = await validateTwitchToken(cleanToken);
+  const stream = await fetchTwitchStream(cleanChannel, cleanToken, validateBody.client_id);
+  return {
+    channel: cleanChannel,
+    isLive: Boolean(stream),
+    viewerCount: stream?.viewer_count ?? null
+  };
+}
+
+async function validateTwitchToken(token) {
+  const cleanToken = String(token || "").replace(/^oauth:/i, "").trim();
   const validateResponse = await fetch("https://id.twitch.tv/oauth2/validate", {
     headers: { authorization: `OAuth ${cleanToken}` }
   });
@@ -177,11 +188,32 @@ async function fetchTwitchViewerCount(channel, token) {
   if (!validateResponse.ok || !validateBody.client_id) {
     throw new Error(validateBody.message || "Twitch token validation failed.");
   }
+  return validateBody;
+}
 
+async function fetchTwitchUser(login, token, clientId) {
+  const cleanLogin = String(login || "").trim().replace(/^@/, "").toLowerCase();
+  const usersResponse = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(cleanLogin)}`, {
+    headers: {
+      authorization: `Bearer ${token}`,
+      "client-id": clientId
+    }
+  });
+  const usersBody = await usersResponse.json().catch(() => ({}));
+  if (!usersResponse.ok) {
+    throw new Error(usersBody.message || `Twitch user lookup failed: HTTP ${usersResponse.status}`);
+  }
+  const user = usersBody.data?.[0];
+  if (!user?.id) throw new Error(`Twitch channel "${cleanLogin}" was not found.`);
+  return user;
+}
+
+async function fetchTwitchStream(channel, token, clientId) {
+  const cleanChannel = String(channel || "").trim().replace(/^@/, "").toLowerCase();
   const streamsResponse = await fetch(`https://api.twitch.tv/helix/streams?user_login=${encodeURIComponent(cleanChannel)}`, {
     headers: {
-      authorization: `Bearer ${cleanToken}`,
-      "client-id": validateBody.client_id
+      authorization: `Bearer ${token}`,
+      "client-id": clientId
     }
   });
   const streamsBody = await streamsResponse.json().catch(() => ({}));
@@ -189,12 +221,213 @@ async function fetchTwitchViewerCount(channel, token) {
     throw new Error(streamsBody.message || `Twitch streams lookup failed: HTTP ${streamsResponse.status}`);
   }
 
-  const stream = streamsBody.data?.[0];
-  return {
-    channel: cleanChannel,
-    isLive: Boolean(stream),
-    viewerCount: stream?.viewer_count ?? null
-  };
+  return streamsBody.data?.[0] || null;
+}
+
+async function createTwitchEventSubSubscription({ type, version, condition, token, clientId, sessionId }) {
+  const response = await fetch("https://api.twitch.tv/helix/eventsub/subscriptions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "client-id": clientId,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      type,
+      version,
+      condition,
+      transport: {
+        method: "websocket",
+        session_id: sessionId
+      }
+    })
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || `Twitch EventSub ${type} failed: HTTP ${response.status}`);
+  }
+  return body.data?.[0] || body;
+}
+
+function twitchActivityFromNotification(payload, streamName, profileId) {
+  const type = payload.subscription?.type || "";
+  const event = payload.event || {};
+  if (type === "channel.follow") {
+    const user = event.user_name || event.user_login || "Someone";
+    return {
+      source: "twitch",
+      type: "activity",
+      event: "follow",
+      overlay: false,
+      user,
+      text: `${user} followed`,
+      badge: "FOLLOW",
+      streamName,
+      profileId,
+      ts: Date.now()
+    };
+  }
+  if (type === "channel.subscribe") {
+    const user = event.user_name || event.user_login || "Someone";
+    return {
+      source: "twitch",
+      type: "activity",
+      event: "subscription",
+      overlay: false,
+      user,
+      text: `${user} subscribed`,
+      badge: "SUB",
+      streamName,
+      profileId,
+      ts: Date.now()
+    };
+  }
+  return null;
+}
+
+async function startTwitchEventSub({ channel, token, streamName, profileId }) {
+  const cleanToken = String(token || "").replace(/^oauth:/i, "").trim();
+  const cleanChannel = String(channel || "").trim().replace(/^@/, "").toLowerCase();
+  if (!cleanChannel || !cleanToken) throw new Error("Missing Twitch channel or OAuth token.");
+
+  const validateBody = await validateTwitchToken(cleanToken);
+  const scopes = new Set(validateBody.scopes || []);
+  if (!scopes.has("moderator:read:followers")) {
+    throw new Error("Twitch follow events need a token with moderator:read:followers. Generate a new token with chat:read and moderator:read:followers.");
+  }
+
+  const broadcaster = await fetchTwitchUser(cleanChannel, cleanToken, validateBody.client_id);
+  const key = `${profileId || "stream-1"}:twitch:${broadcaster.id}`;
+  const previous = twitchEventSubs.get(key);
+  if (previous?.ws) {
+    try { previous.ws.close(); } catch {}
+  }
+
+  return await new Promise((resolve, reject) => {
+    let settled = false;
+    let sessionId = "";
+    const created = [];
+    const ws = new WebSocket("wss://eventsub.wss.twitch.tv/ws");
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { ws.close(); } catch {}
+      reject(new Error("Twitch EventSub did not confirm in time."));
+    }, 10000);
+
+    twitchEventSubs.set(key, { ws, channel: cleanChannel, streamName, profileId });
+
+    const finishReady = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve({
+        channel: cleanChannel,
+        broadcasterId: broadcaster.id,
+        subscriptions: created.map((item) => item.type).filter(Boolean)
+      });
+    };
+
+    ws.addEventListener("message", async (message) => {
+      try {
+        const data = JSON.parse(message.data);
+        const messageType = data.metadata?.message_type;
+        if (messageType === "session_welcome") {
+          sessionId = data.payload?.session?.id;
+          if (!sessionId) throw new Error("Twitch EventSub welcome did not include a session id.");
+          created.push(await createTwitchEventSubSubscription({
+            type: "channel.follow",
+            version: "2",
+            condition: {
+              broadcaster_user_id: broadcaster.id,
+              moderator_user_id: validateBody.user_id
+            },
+            token: cleanToken,
+            clientId: validateBody.client_id,
+            sessionId
+          }));
+          if (scopes.has("channel:read:subscriptions")) {
+            try {
+              created.push(await createTwitchEventSubSubscription({
+                type: "channel.subscribe",
+                version: "1",
+                condition: {
+                  broadcaster_user_id: broadcaster.id
+                },
+                token: cleanToken,
+                clientId: validateBody.client_id,
+                sessionId
+              }));
+            } catch {
+              // Keep follow events running even if optional subscription events are unavailable.
+            }
+          }
+          finishReady();
+          return;
+        }
+        if (messageType === "notification") {
+          const activity = twitchActivityFromNotification(data.payload, streamName || cleanChannel, profileId || "");
+          if (activity) broadcastHub(activity);
+          return;
+        }
+        if (messageType === "session_reconnect") {
+          const reconnectUrl = data.payload?.session?.reconnect_url;
+          if (reconnectUrl) {
+            try { ws.close(); } catch {}
+            startTwitchEventSub({ channel: cleanChannel, token: cleanToken, streamName, profileId }).catch(() => {});
+          }
+          return;
+        }
+        if (messageType === "revocation") {
+          const reason = data.payload?.subscription?.status || "revoked";
+          broadcastHub({
+            source: "twitch",
+            type: "activity",
+            event: "eventsub_revoked",
+            overlay: false,
+            user: "Twitch",
+            text: `Twitch EventSub was revoked: ${reason}`,
+            badge: "EVENTSUB",
+            streamName: streamName || cleanChannel,
+            profileId: profileId || "",
+            ts: Date.now()
+          });
+        }
+      } catch (error) {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          try { ws.close(); } catch {}
+          reject(error);
+        }
+      }
+    });
+
+    ws.addEventListener("error", () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(new Error("Twitch EventSub websocket error."));
+    });
+
+    ws.addEventListener("close", () => {
+      const current = twitchEventSubs.get(key);
+      if (current?.ws === ws) twitchEventSubs.delete(key);
+      if (!settled) {
+        settled = true;
+        clearTimeout(timeout);
+        reject(new Error("Twitch EventSub closed before it was ready."));
+      }
+    });
+  });
+}
+
+function stopTwitchEventSub(profileId = "stream-1") {
+  for (const [key, item] of twitchEventSubs) {
+    if (!key.startsWith(`${profileId}:twitch:`)) continue;
+    try { item.ws.close(); } catch {}
+    twitchEventSubs.delete(key);
+  }
 }
 
 function extractYouTubeVideoId(input) {
@@ -248,12 +481,37 @@ function normalizeYouTubeMessage(item) {
   if (author.isChatOwner) badges.push("OWNER");
   else if (author.isChatModerator) badges.push("MOD");
   if (author.isChatSponsor) badges.push("MEMBER");
-  if (snippet.type === "superChatEvent") badges.push("SUPER");
+  const type = snippet.type || "textMessageEvent";
+  const superChatAmount = snippet.superChatDetails?.amountDisplayString || "";
+  const isActivity = [
+    "superChatEvent",
+    "superStickerEvent",
+    "newSponsorEvent",
+    "memberMilestoneChatEvent",
+    "membershipGiftingEvent",
+    "giftMembershipReceivedEvent"
+  ].includes(type);
+  if (type === "superChatEvent" || type === "superStickerEvent") badges.push("PAID");
+  if (type === "newSponsorEvent" || type === "memberMilestoneChatEvent") badges.push("MEMBER");
+
+  const activityText = (() => {
+    if (type === "superChatEvent") return `${author.displayName || "YouTube user"} sent a Super Chat${superChatAmount ? ` (${superChatAmount})` : ""}`;
+    if (type === "superStickerEvent") return `${author.displayName || "YouTube user"} sent a Super Sticker`;
+    if (type === "newSponsorEvent") return `${author.displayName || "YouTube user"} became a member`;
+    if (type === "memberMilestoneChatEvent") return snippet.displayMessage || `${author.displayName || "YouTube user"} shared a member milestone`;
+    if (type === "membershipGiftingEvent") return `${author.displayName || "YouTube user"} gifted memberships`;
+    if (type === "giftMembershipReceivedEvent") return `${author.displayName || "YouTube user"} received a gifted membership`;
+    return snippet.displayMessage || "";
+  })();
+
   return {
     source: "youtube",
     id: item.id,
+    type: isActivity ? "activity" : "chat",
+    event: isActivity ? type : "",
+    overlay: !isActivity,
     user: author.displayName || "YouTube user",
-    text: snippet.displayMessage || "",
+    text: isActivity ? activityText : snippet.displayMessage || "",
     badge: badges.join(" "),
     created_at: snippet.publishedAt
   };
@@ -377,6 +635,9 @@ async function handleKickStream(req, res, url) {
           const data = typeof msg.data === "string" ? JSON.parse(msg.data) : msg.data;
           sendSse(res, "message", {
             source: "kick",
+            type: "activity",
+            event: "subscription",
+            overlay: false,
             user: data.username || "Someone",
             text: "Just subscribed",
             badge: "SUB"
@@ -532,7 +793,6 @@ async function handleHubStream(req, res) {
   hubClients.add(res);
   sendSse(res, "status", { ok: true, status: "connected" });
   for (const payload of hubRecent.slice(-10)) {
-    sendSse(res, "", payload);
     sendSse(res, "hub", payload);
   }
 
@@ -544,29 +804,81 @@ async function handleHubStream(req, res) {
 async function handleHubPush(req, res) {
   try {
     const body = await readJsonBody(req);
-    const id = String(body.id || `${body.source}:${body.user}:${body.text}:${body.ts || ""}`).slice(0, 600);
-    if (hubSeen.has(id)) {
+    sendHubPayload(res, body);
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
+}
+
+function sendHubPayload(res, body) {
+  const id = String(body.id || `${body.source}:${body.type || "chat"}:${body.event || ""}:${body.user || body.username}:${body.text}:${body.ts || ""}`).slice(0, 600);
+  if (hubSeen.has(id)) {
       sendJson(res, 200, { ok: true, duplicate: true, clients: hubClients.size });
       return;
-    }
-    hubSeen.add(id);
-    if (hubSeen.size > 3000) {
-      const first = hubSeen.values().next().value;
-      hubSeen.delete(first);
-    }
+  }
+  hubSeen.add(id);
+  if (hubSeen.size > 3000) {
+    const first = hubSeen.values().next().value;
+    hubSeen.delete(first);
+  }
 
-    const payload = {
-      id,
-      source: body.source,
-      user: body.user || body.username || "unknown",
-      text: body.text || "",
-      badge: body.badge || "",
-      streamName: body.streamName || "",
-      profileId: body.profileId || "",
-      ts: body.ts || Date.now()
+  const type = body.type || "chat";
+  const event = body.event || "";
+  const user = body.user || body.username || "unknown";
+  const payload = {
+    id,
+    source: body.source,
+    type,
+    event,
+    overlay: body.overlay !== false,
+    user,
+    text: body.text || (type === "activity" && event ? `${user} ${event}` : ""),
+    badge: body.badge || "",
+    streamName: body.streamName || "",
+    profileId: body.profileId || "",
+    ts: body.ts || Date.now()
+  };
+  broadcastHub(payload);
+  sendJson(res, 200, { ok: true, clients: hubClients.size });
+}
+
+async function handleActivityPush(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    const sourceMap = {
+      "pump.fun": "pump",
+      pumpfun: "pump",
+      yt: "youtube",
+      twitter: "x"
     };
-    broadcastHub(payload);
-    sendJson(res, 200, { ok: true, clients: hubClients.size });
+    const rawSource = String(body.source || "twitch").toLowerCase();
+    const source = sourceMap[rawSource] || rawSource;
+    const allowedSources = new Set(["twitch", "x", "youtube", "pump", "kick"]);
+    if (!allowedSources.has(source)) {
+      sendJson(res, 400, { error: "Unknown activity source. Use twitch, x, youtube, pump, or kick." });
+      return;
+    }
+    const event = String(body.event || body.activity || "follow").toLowerCase();
+    const user = body.user || body.username || body.name || "Someone";
+    const labels = {
+      follow: "followed",
+      sub: "subscribed",
+      subscribe: "subscribed",
+      subscription: "subscribed",
+      member: "became a member",
+      superchat: "sent a Super Chat",
+      raid: "raided"
+    };
+    sendHubPayload(res, {
+      ...body,
+      source,
+      type: "activity",
+      event,
+      overlay: false,
+      user,
+      text: body.text || `${user} ${labels[event] || event}`,
+      badge: body.badge || event.toUpperCase()
+    });
   } catch (error) {
     sendJson(res, 400, { error: error.message });
   }
@@ -600,6 +912,31 @@ async function handleTwitchMeta(req, res) {
     const body = await readJsonBody(req);
     const meta = await fetchTwitchViewerCount(body.channel, body.token);
     sendJson(res, 200, { source: "twitch", ...meta });
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
+}
+
+async function handleTwitchEventSubStart(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    const result = await startTwitchEventSub({
+      channel: body.channel,
+      token: body.token,
+      streamName: body.streamName,
+      profileId: body.profileId
+    });
+    sendJson(res, 200, { ok: true, source: "twitch", ...result });
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
+}
+
+async function handleTwitchEventSubStop(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    stopTwitchEventSub(body.profileId || "stream-1");
+    sendJson(res, 200, { ok: true, source: "twitch" });
   } catch (error) {
     sendJson(res, 400, { error: error.message });
   }
@@ -787,6 +1124,11 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/activity/push" && req.method === "POST") {
+    handleActivityPush(req, res);
+    return;
+  }
+
   if (url.pathname === "/hub/recent") {
     handleHubRecent(req, res);
     return;
@@ -799,6 +1141,16 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === "/twitch/meta" && req.method === "POST") {
     handleTwitchMeta(req, res);
+    return;
+  }
+
+  if (url.pathname === "/twitch/eventsub/start" && req.method === "POST") {
+    handleTwitchEventSubStart(req, res);
+    return;
+  }
+
+  if (url.pathname === "/twitch/eventsub/stop" && req.method === "POST") {
+    handleTwitchEventSubStop(req, res);
     return;
   }
 

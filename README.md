@@ -40,7 +40,7 @@ http://127.0.0.1:3000
 6. Confirm the counter shows connected sources, for example `1/5`, `2/5`, or `6/10`.
 7. Press `Launch StreamHub`.
 
-Twitch needs a chat OAuth token with `chat:read`. The channel field is the Twitch channel you want to join.
+Twitch needs an OAuth token with `chat:read` for chat. For follow alerts in StreamHub, generate the token with `moderator:read:followers` too. For subscription alerts, add `channel:read:subscriptions`.
 
 Useful links:
 
@@ -53,6 +53,25 @@ Useful links:
 - YouTube API: https://console.cloud.google.com/apis/library/youtube.googleapis.com
 - YouTube live chat docs: https://developers.google.com/youtube/v3/live/docs/liveChatMessages/list
 - Pump.fun livechat bridge folder: `pump-livechat-bridge`
+
+Twitch chat, follows, and subs setup:
+
+1. Open the Twitch token generator.
+2. Select only the scopes StreamHub needs:
+
+```text
+chat:read
+moderator:read:followers
+channel:read:subscriptions
+```
+
+3. `chat:read` is required for Twitch chat.
+4. `moderator:read:followers` is required for follow alerts.
+5. `channel:read:subscriptions` is optional, but required for Twitch sub alerts.
+6. Paste the generated token into the Twitch OAuth token field.
+7. Click `Connect Twitch`.
+
+Do not enable sensitive scopes like `channel:read:stream_key`, `user:read:email`, `whispers:read`, `user:manage:whispers`, or broad `manage` permissions. StreamHub does not need them.
 
 Kick setup:
 
@@ -88,6 +107,7 @@ Pump.fun setup:
 2. Paste a Pump.fun livechat URL into the Pump.fun card.
 3. Click `Connect Pump.fun Bridge`.
 4. Open the Pump.fun livechat tab and keep it open while streaming.
+5. If Chrome asks for permission, click `Allow`, then refresh the Pump.fun livechat tab once.
 
 Example:
 
@@ -114,6 +134,24 @@ StreamHub uses two local browser pages while you stream:
 - Main app / dock: connects Twitch, X, YouTube, Pump.fun, and Kick.
 - Overlay: transparent username + message bubbles for the actual stream scene.
 
+Stream activity events, such as Twitch follows, Twitch subscriptions, YouTube memberships, YouTube Super Chats, and Kick subscriptions, appear in the main StreamHub feed and Activity panel. They are intentionally hidden from the OBS overlay so only chat messages show on stream.
+
+External alert tools can push follows/subs into StreamHub with:
+
+```text
+POST http://127.0.0.1:3000/activity/push
+```
+
+Example JSON:
+
+```json
+{
+  "source": "twitch",
+  "event": "follow",
+  "user": "viewer123"
+}
+```
+
 ### OBS Dock
 
 Add this URL as a custom browser dock if you want the full StreamHub controls inside OBS:
@@ -123,6 +161,8 @@ http://127.0.0.1:3000
 ```
 
 Connect your platforms here and keep this page open while streaming.
+
+In an OBS dock, the Activity rail has its own scroll area. Drag the thin divider between chat and Activity to resize it; double-click the divider to reset the width.
 
 ### Stream Overlay
 
@@ -223,6 +263,8 @@ Install the optional extension:
 
 If you do not want to install the extension, use `Copy console fallback` in the Pump.fun card, open the Pump livechat tab, paste the script into DevTools Console, and press Enter.
 
+The extension only runs on `https://pump.fun/livechat/*` pages and ignores the normal Pump.fun app pages.
+
 Pump.fun viewer count is not included yet; StreamHub shows Pump.fun message activity in the Activity panel.
 
 ## Collab Streams
@@ -245,7 +287,7 @@ Messages in the hub are labeled with both the platform and the stream name:
 
 The Activity panel breaks chat down by platform and by stream slot. Viewer counts are shown when StreamHub can fetch them:
 
-- Twitch: uses the Twitch OAuth token to validate the token's Client-ID, then reads the live stream's `viewer_count`.
+- Twitch: uses the Twitch OAuth token to validate the token's Client-ID, read the live stream's `viewer_count`, and subscribe to EventSub follow/sub events when the token has the required scopes.
 - YouTube: uses YouTube `liveStreamingDetails.concurrentViewers` when available.
 - Kick: uses Kick channel metadata when Kick returns a live `viewer_count`.
 - Pump.fun: shows message activity, but viewer count is `--` because the bridge only captures visible chat messages.
