@@ -1176,7 +1176,7 @@
       <article class="setup-card">
         <div class="setup-card-head">
           <div class="setup-icon" style="color:var(--youtube); background:rgba(255,0,51,.12)"></div>
-          <div><strong>YouTube</strong><small>Official live chat API</small></div>
+          <div><strong>YouTube</strong><small>API or local livechat bridge</small></div>
           <span class="status-chip" id="setupStatus-youtube">Ready</span>
         </div>
         <div class="setup-card-body">
@@ -1189,7 +1189,14 @@
             <a href="https://developers.google.com/youtube/v3/live/docs/liveChatMessages/list" target="_blank" rel="noreferrer">Live chat docs</a>
           </div>
           <button class="text-btn primary" type="button" id="connectYoutube">Connect YouTube</button>
-          <p class="note" id="setupMsg-youtube">Uses YouTube's official Live Chat API and respects YouTube's polling interval. API keys work for public live chats; OAuth is better for private/owned streams.</p>
+          <p class="note">API mode uses YouTube quota. The local bridge below avoids API quota by reading an open YouTube chat tab.</p>
+          <div class="field"><label for="youtubeLivechatUrl">Bridge livechat URL</label><input id="youtubeLivechatUrl" placeholder="https://www.youtube.com/live_chat?is_popout=1&v=VIDEO_ID"></div>
+          <div class="help-links">
+            <button class="chip-btn" type="button" id="openYoutubeLivechat">Open YouTube chat</button>
+            <button class="chip-btn" type="button" id="copyYoutubeBridgeScript">Copy console fallback</button>
+          </div>
+          <button class="text-btn" type="button" id="connectYoutubeBridge">Connect YouTube Bridge</button>
+          <p class="note" id="setupMsg-youtube">API keys work for public live chats. For no-quota mode, load the optional <code>youtube-livechat-bridge</code> extension, open the YouTube chat popout, then connect this bridge.</p>
         </div>
       </article>
 
@@ -1365,11 +1372,11 @@
         <summary>
           <span class="source-dot" style="background: var(--youtube)"></span>
           <strong>YouTube Chat</strong>
-          <span>Official API</span>
+          <span>API or bridge</span>
         </summary>
         <div class="connector-body">
           <button class="text-btn danger" type="button" id="disconnectYoutube">Disconnect YouTube</button>
-          <p class="note">YouTube uses the official Live Chat API through the local StreamHub relay and follows YouTube's polling interval.</p>
+          <p class="note">Use the official Live Chat API when quota is available, or the YouTube Bridge to mirror an open chat tab without spending API quota.</p>
         </div>
       </details>
 
@@ -1477,6 +1484,7 @@ const setupFieldIds = [
   "xProxy",
   "xLivechatUrl",
   "youtubeUrl",
+  "youtubeLivechatUrl",
   "youtubeRelay",
   "pumpLivechatUrl",
   "kickChannel",
@@ -1667,6 +1675,7 @@ function addStreamProfile() {
     fields: {
       streamName: `Stream ${next}`,
       xProxy: "/x/stream",
+      youtubeLivechatUrl: "",
       youtubeRelay: "/youtube/stream",
       pumpLivechatUrl: "",
       kickRelay: "/kick/stream"
@@ -1870,6 +1879,7 @@ function subscribeHubOverlay() {
     console.warn("StreamHub overlay disconnected. Check that the local server is still running.");
   };
   pollHubRecent();
+  hubPoll = setInterval(pollHubRecent, 1000);
 }
 
 function subscribeHubActivityInbox() {
@@ -2344,6 +2354,69 @@ function connectYoutube() {
   connectSse("youtube", resolved.toString(), profileId, streamName);
 }
 
+function extractYoutubeVideoId(input) {
+  const value = String(input || "").trim();
+  if (!value) return "";
+  if (/^[A-Za-z0-9_-]{11}$/.test(value)) return value;
+  try {
+    const url = new URL(value);
+    if (url.hostname.includes("youtu.be")) return url.pathname.split("/").filter(Boolean)[0] || "";
+    if (url.searchParams.get("v")) return url.searchParams.get("v") || "";
+    const parts = url.pathname.split("/").filter(Boolean);
+    const marker = parts.findIndex((part) => ["live", "shorts", "embed"].includes(part));
+    if (marker >= 0 && parts[marker + 1]) return parts[marker + 1];
+  } catch {
+  }
+  return "";
+}
+
+function normalizeYoutubeLivechatUrl() {
+  const raw = document.getElementById("youtubeLivechatUrl").value.trim() || document.getElementById("youtubeUrl").value.trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.hostname.includes("youtube.com") && url.pathname.startsWith("/live_chat")) return url.toString();
+  } catch {
+  }
+  const videoId = extractYoutubeVideoId(raw);
+  if (!videoId) return raw;
+  return `https://www.youtube.com/live_chat?is_popout=1&v=${encodeURIComponent(videoId)}`;
+}
+
+function openYoutubeLivechat() {
+  const url = normalizeYoutubeLivechatUrl();
+  if (!url) {
+    setSourceStatus("youtube", "error", "Enter a YouTube live URL or popout chat URL first.");
+    return;
+  }
+  document.getElementById("youtubeLivechatUrl").value = url;
+  saveSetupFields();
+  window.open(url, "_blank", "noopener,noreferrer");
+  setSetupMessage("youtube", "Opened YouTube chat. Keep that tab open with the StreamHub YouTube bridge extension running.");
+}
+
+async function copyYoutubeBridgeScript() {
+  const script = `(() => {
+  const s = document.createElement("script");
+  s.src = "${window.location.origin}/youtube/livechat/capture.js?ts=" + Date.now();
+  document.documentElement.appendChild(s);
+})();`;
+  try {
+    await navigator.clipboard.writeText(script);
+    setSetupMessage("youtube", "Copied the console fallback. Open the YouTube chat tab, paste it into DevTools Console, and press Enter.");
+  } catch {
+    setSetupMessage("youtube", "Could not copy automatically. Use the optional youtube-livechat-bridge extension instead.");
+  }
+}
+
+function connectYoutubeBridge() {
+  saveSetupFields();
+  const profileId = state.activeProfileId;
+  const streamName = activeStreamName();
+  connectSse("youtube", new URL("/youtube/livechat/stream", window.location.origin).toString(), profileId, streamName);
+  setSetupMessage("youtube", "YouTube bridge connected. Open the YouTube chat popout with the extension running, then send a test chat.");
+}
+
 function normalizePumpLivechatUrl() {
   const raw = document.getElementById("pumpLivechatUrl").value.trim();
   if (!raw) return "";
@@ -2402,6 +2475,11 @@ function disconnectSource(source, key = connectionKey(source)) {
   }
   if (source === "twitch") {
     const profileId = key.split(":")[0] || state.activeProfileId;
+    fetch("/twitch/chat/stop", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ profileId })
+    }).catch(() => {});
     fetch("/twitch/eventsub/stop", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -2478,6 +2556,7 @@ function connectTwitch() {
         twitchReady = true;
         setSourceStatus("twitch", "live", `Connected ${streamName} to Twitch #${channel}. Waiting for chat messages.`, key);
         startTwitchViewerPolling(profileId, channel, token);
+        startTwitchChatRelay(profileId, streamName, channel, token);
         startTwitchEventSub(profileId, streamName, channel, token);
       }
       if (!line.includes("PRIVMSG")) return;
@@ -2491,7 +2570,10 @@ function connectTwitch() {
       const msgMatch = line.match(/PRIVMSG #[^ ]+ :(.+)/);
       if (!userMatch || !msgMatch) return;
       const badge = tags.mod === "1" ? "MOD" : tags.subscriber === "1" ? "SUB" : "";
-      addMessage("twitch", tags["display-name"] || userMatch[1], msgMatch[1], badge, streamName, { profileId });
+      addMessage("twitch", tags["display-name"] || userMatch[1], msgMatch[1], badge, streamName, {
+        profileId,
+        id: tags.id ? `twitch:${tags.id}` : undefined
+      });
     });
   });
 
@@ -2503,6 +2585,22 @@ function connectTwitch() {
       setSourceStatus("twitch", "ready", "Twitch disconnected.", key);
     }
   });
+}
+
+async function startTwitchChatRelay(profileId, streamName, channel, token) {
+  try {
+    const response = await fetch("/twitch/chat/start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ profileId, streamName, channel, token })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setSetupMessage("twitch", body.error || "Twitch connected in the dashboard, but the OBS overlay relay did not start.");
+    }
+  } catch {
+    setSetupMessage("twitch", "Twitch connected in the dashboard, but the OBS overlay relay could not start.");
+  }
 }
 
 async function startTwitchEventSub(profileId, streamName, channel, token) {
@@ -2588,6 +2686,7 @@ async function connectAll() {
   const xApiReady = document.getElementById("xQuery").value.trim() && await hasConfiguredXToken();
   const xLivechatReady = document.getElementById("xLivechatUrl").value.trim();
   const youtubeReady = document.getElementById("youtubeUrl").value.trim() && document.getElementById("youtubeToken").value.trim();
+  const youtubeBridgeReady = document.getElementById("youtubeLivechatUrl").value.trim() || document.getElementById("youtubeUrl").value.trim();
   const pumpReady = document.getElementById("pumpLivechatUrl").value.trim();
   const kickReady = document.getElementById("kickChannel").value.trim() || document.getElementById("kickRoomId").value.trim();
 
@@ -2611,8 +2710,11 @@ async function connectAll() {
   if (youtubeReady) {
     connectYoutube();
     jobs.push(waitForSettled("youtube", connectionKey("youtube", profileId)));
+  } else if (youtubeBridgeReady) {
+    connectYoutubeBridge();
+    jobs.push(waitForSettled("youtube", connectionKey("youtube", profileId)));
   } else {
-    setSourceStatus("youtube", "ready", "YouTube skipped. Enter a live URL and API key or OAuth token to connect it.");
+    setSourceStatus("youtube", "ready", "YouTube skipped. Enter API details, or a live URL for bridge mode.");
   }
 
   if (pumpReady) {
@@ -2692,6 +2794,9 @@ document.getElementById("openXLivechat").addEventListener("click", openXLivechat
 document.getElementById("copyXBridgeScript").addEventListener("click", copyXBridgeScript);
 document.getElementById("disconnectX").addEventListener("click", () => disconnectSource("x"));
 document.getElementById("connectYoutube").addEventListener("click", connectYoutube);
+document.getElementById("connectYoutubeBridge").addEventListener("click", connectYoutubeBridge);
+document.getElementById("openYoutubeLivechat").addEventListener("click", openYoutubeLivechat);
+document.getElementById("copyYoutubeBridgeScript").addEventListener("click", copyYoutubeBridgeScript);
 document.getElementById("disconnectYoutube").addEventListener("click", () => disconnectSource("youtube"));
 document.getElementById("connectPump").addEventListener("click", connectPump);
 document.getElementById("openPumpLivechat").addEventListener("click", openPumpLivechat);

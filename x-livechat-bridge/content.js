@@ -33,6 +33,10 @@
     return true;
   }
 
+  function messageKey(user, message) {
+    return clean(`x-livechat:${user}:${message}`).toLowerCase();
+  }
+
   function isNoise(text) {
     const value = clean(text).toLowerCase();
     if (!value) return true;
@@ -142,7 +146,7 @@
     const user = username || displayName || "X livechat";
     if (!message || clean(message).length < 2 || clean(message) === clean(user)) return null;
 
-    const id = clean(`x-livechat:${rowBridgeId(row)}:${user}:${message}`);
+    const id = messageKey(user, message);
     if (!remember(id)) return null;
     markRowSent(row);
     return {
@@ -188,7 +192,7 @@
         const displayName = displayNameFrom(row);
         const message = messageFrom(row, username, displayName);
         const user = username || displayName || "X livechat";
-        if (message) remember(clean(`x-livechat:${rowBridgeId(row)}:${user}:${message}`));
+        if (message) remember(messageKey(user, message));
         markRowSent(row);
         continue;
       }

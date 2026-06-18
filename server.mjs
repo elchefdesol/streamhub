@@ -12,12 +12,17 @@ const DEFAULT_INTERVAL_MS = Number(process.env.X_POLL_INTERVAL_MS || 15000);
 const YOUTUBE_MIN_POLL_INTERVAL_MS = Math.max(Number(process.env.YOUTUBE_MIN_POLL_INTERVAL_MS || 15000), 1000);
 const xLivechatClients = new Set();
 const xLivechatSeen = new Set();
+const xLivechatContentSeen = new Map();
 const pumpLivechatClients = new Set();
 const pumpLivechatSeen = new Set();
+const youtubeLivechatClients = new Set();
+const youtubeLivechatSeen = new Set();
+const youtubeLivechatContentSeen = new Map();
 const hubClients = new Set();
 const hubSeen = new Set();
 const hubRecent = [];
 const twitchEventSubs = new Map();
+const twitchChatConnections = new Map();
 
 const assetTypes = new Map([
   [".svg", "image/svg+xml; charset=utf-8"],
@@ -93,12 +98,45 @@ function broadcastPumpLivechat(payload) {
   }
 }
 
+function broadcastYouTubeLivechat(payload) {
+  for (const res of youtubeLivechatClients) {
+    sendSse(res, "message", payload);
+  }
+}
+
 function broadcastHub(payload) {
   hubRecent.push(payload);
   if (hubRecent.length > 40) hubRecent.shift();
   for (const res of hubClients) {
     sendSse(res, "hub", payload);
   }
+}
+
+function rememberHubId(id) {
+  if (hubSeen.has(id)) return false;
+  hubSeen.add(id);
+  if (hubSeen.size > 3000) {
+    const first = hubSeen.values().next().value;
+    hubSeen.delete(first);
+  }
+  return true;
+}
+
+function rememberRecentContent(store, key, ttlMs = 120000, maxSize = 2000) {
+  const now = Date.now();
+  const cutoff = now - ttlMs;
+  for (const [itemKey, ts] of store) {
+    if (ts < cutoff) store.delete(itemKey);
+  }
+  if (store.has(key)) {
+    store.set(key, now);
+    return false;
+  }
+  store.set(key, now);
+  while (store.size > maxSize) {
+    store.delete(store.keys().next().value);
+  }
+  return true;
 }
 
 function normalizePost(post, users) {
@@ -222,6 +260,149 @@ async function fetchTwitchStream(channel, token, clientId) {
   }
 
   return streamsBody.data?.[0] || null;
+}
+
+function parseTwitchTags(tagStr) {
+  const tags = {};
+  String(tagStr || "").split(";").forEach((tag) => {
+    if (!tag) return;
+    const index = tag.indexOf("=");
+    const key = index === -1 ? tag : tag.slice(0, index);
+    const value = index === -1 ? "" : tag.slice(index + 1);
+    tags[key] = value.replace(/\\s/g, " ");
+  });
+  return tags;
+}
+
+function parseTwitchPrivmsg(line) {
+  const match = line.match(/^(?:@([^ ]+) )?:(\S+)![^ ]+ PRIVMSG #([^ ]+) :([\s\S]+)$/);
+  if (!match) return null;
+  return {
+    tags: parseTwitchTags(match[1] || ""),
+    user: match[2],
+    channel: match[3],
+    text: match[4]
+  };
+}
+
+function twitchChatBadge(tags) {
+  if (tags.mod === "1") return "MOD";
+  if (tags.subscriber === "1") return "SUB";
+  if (String(tags.badges || "").includes("broadcaster/")) return "OWNER";
+  return "";
+}
+
+async function startTwitchChatRelay({ channel, token, streamName, profileId }) {
+  const cleanToken = String(token || "").replace(/^oauth:/i, "").trim();
+  const cleanChannel = String(channel || "").trim().replace(/^@/, "").toLowerCase();
+  if (!cleanChannel || !cleanToken) throw new Error("Missing Twitch channel or OAuth token.");
+
+  const key = `${profileId || "stream-1"}:twitch:${cleanChannel}`;
+  const previous = twitchChatConnections.get(key);
+  if (previous?.ws) {
+    try { previous.ws.close(); } catch {}
+  }
+
+  return await new Promise((resolve, reject) => {
+    let settled = false;
+    let buffer = "";
+    const ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { ws.close(); } catch {}
+      reject(new Error("Twitch chat relay did not confirm in time."));
+    }, 10000);
+
+    twitchChatConnections.set(key, { ws, channel: cleanChannel, streamName, profileId });
+
+    const finishReady = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve({ channel: cleanChannel });
+    };
+
+    const handleLine = (line) => {
+      if (!line) return;
+      if (line.startsWith("PING")) {
+        ws.send("PONG :tmi.twitch.tv");
+        return;
+      }
+      if (line.includes("Login authentication failed") || line.includes("Improperly formatted auth")) {
+        throw new Error("Twitch chat auth failed. Check the OAuth token.");
+      }
+      if (line.includes(" 001 ") || line.includes(`JOIN #${cleanChannel}`)) {
+        finishReady();
+      }
+      if (!line.includes(" PRIVMSG ")) return;
+      const parsed = parseTwitchPrivmsg(line);
+      if (!parsed) return;
+      const id = parsed.tags.id ? `twitch:${parsed.tags.id}` : `twitch:${parsed.channel}:${parsed.user}:${parsed.text}`;
+      const payload = {
+        source: "twitch",
+        id,
+        type: "chat",
+        event: "",
+        overlay: true,
+        user: parsed.tags["display-name"] || parsed.user,
+        text: parsed.text,
+        badge: twitchChatBadge(parsed.tags),
+        streamName: streamName || cleanChannel,
+        profileId: profileId || "",
+        ts: Date.now()
+      };
+      if (rememberHubId(payload.id)) broadcastHub(payload);
+    };
+
+    ws.addEventListener("open", () => {
+      ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands");
+      ws.send(`PASS oauth:${cleanToken}`);
+      ws.send(`NICK ${cleanChannel}`);
+      ws.send(`JOIN #${cleanChannel}`);
+    });
+
+    ws.addEventListener("message", (message) => {
+      try {
+        buffer += String(message.data || "");
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || "";
+        lines.forEach(handleLine);
+      } catch (error) {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          try { ws.close(); } catch {}
+          reject(error);
+        }
+      }
+    });
+
+    ws.addEventListener("error", () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(new Error("Twitch chat relay websocket error."));
+    });
+
+    ws.addEventListener("close", () => {
+      const current = twitchChatConnections.get(key);
+      if (current?.ws === ws) twitchChatConnections.delete(key);
+      if (!settled) {
+        settled = true;
+        clearTimeout(timeout);
+        reject(new Error("Twitch chat relay closed before it was ready."));
+      }
+    });
+  });
+}
+
+function stopTwitchChatRelay(profileId = "stream-1") {
+  for (const [key, item] of twitchChatConnections) {
+    if (!key.startsWith(`${profileId}:twitch:`)) continue;
+    try { item.ws.close(); } catch {}
+    twitchChatConnections.delete(key);
+  }
 }
 
 async function createTwitchEventSubSubscription({ type, version, condition, token, clientId, sessionId }) {
@@ -694,6 +875,8 @@ async function handleXLivechatPush(req, res) {
       const text = String(item.text || "").trim();
       if (!text) continue;
       const user = String(item.user || item.username || "X livechat").trim();
+      const contentKey = `${user}:${text}`.replace(/\s+/g, " ").trim().toLowerCase();
+      if (!rememberRecentContent(xLivechatContentSeen, contentKey)) continue;
       const id = String(item.id || `${user}:${text}`).slice(0, 500);
       if (xLivechatSeen.has(id)) continue;
       xLivechatSeen.add(id);
@@ -782,6 +965,80 @@ async function handlePumpLivechatPush(req, res) {
   }
 }
 
+async function handleYouTubeLivechatStream(req, res) {
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+    "access-control-allow-origin": "*"
+  });
+
+  youtubeLivechatClients.add(res);
+  sendSse(res, "status", { source: "youtube", status: "connected", mode: "livechat-bridge" });
+
+  req.on("close", () => {
+    youtubeLivechatClients.delete(res);
+  });
+}
+
+async function handleYouTubeLivechatPush(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    if (body.type === "bridge-status") {
+      const message = body.url
+        ? `YouTube bridge detected on ${body.url}. Waiting for new chat messages.`
+        : "YouTube bridge detected. Waiting for new chat messages.";
+      for (const client of youtubeLivechatClients) {
+        sendSse(client, "status", { source: "youtube", status: "connected", mode: "livechat-bridge", bridgeSeen: true, message });
+      }
+      sendJson(res, 200, { ok: true, type: "bridge-status", clients: youtubeLivechatClients.size });
+      return;
+    }
+
+    const items = Array.isArray(body.messages) ? body.messages : [body];
+    let accepted = 0;
+
+    for (const item of items) {
+      const text = String(item.text || item.message || "").trim();
+      if (!text) continue;
+      const user = String(item.user || item.username || "YouTube user").trim();
+      const event = String(item.event || "").trim();
+      const contentKey = `${event}:${user}:${text}`.replace(/\s+/g, " ").trim().toLowerCase();
+      if (!rememberRecentContent(youtubeLivechatContentSeen, contentKey)) continue;
+      const id = String(item.id || `youtube:${contentKey}:${item.ts || ""}`).slice(0, 600);
+      if (youtubeLivechatSeen.has(id)) continue;
+      youtubeLivechatSeen.add(id);
+      if (youtubeLivechatSeen.size > 2000) {
+        const first = youtubeLivechatSeen.values().next().value;
+        youtubeLivechatSeen.delete(first);
+      }
+
+      accepted += 1;
+      const ts = Number.isFinite(Number(item.ts)) ? Number(item.ts) : Date.now();
+      const payload = {
+        source: "youtube",
+        id,
+        type: item.type || "chat",
+        event,
+        overlay: item.overlay !== false,
+        user,
+        text,
+        badge: item.badge || "",
+        created_at: new Date(ts).toISOString(),
+        ts
+      };
+      broadcastYouTubeLivechat(payload);
+      if (payload.type !== "activity" && payload.overlay !== false && rememberHubId(payload.id)) {
+        broadcastHub(payload);
+      }
+    }
+
+    sendJson(res, 200, { ok: true, accepted, clients: youtubeLivechatClients.size });
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
+}
+
 async function handleHubStream(req, res) {
   res.writeHead(200, {
     "content-type": "text/event-stream; charset=utf-8",
@@ -796,7 +1053,12 @@ async function handleHubStream(req, res) {
     sendSse(res, "hub", payload);
   }
 
+  const heartbeat = setInterval(() => {
+    sendSse(res, "status", { ok: true, status: "connected", ts: Date.now() });
+  }, 15000);
+
   req.on("close", () => {
+    clearInterval(heartbeat);
     hubClients.delete(res);
   });
 }
@@ -812,14 +1074,9 @@ async function handleHubPush(req, res) {
 
 function sendHubPayload(res, body) {
   const id = String(body.id || `${body.source}:${body.type || "chat"}:${body.event || ""}:${body.user || body.username}:${body.text}:${body.ts || ""}`).slice(0, 600);
-  if (hubSeen.has(id)) {
+  if (!rememberHubId(id)) {
       sendJson(res, 200, { ok: true, duplicate: true, clients: hubClients.size });
       return;
-  }
-  hubSeen.add(id);
-  if (hubSeen.size > 3000) {
-    const first = hubSeen.values().next().value;
-    hubSeen.delete(first);
   }
 
   const type = body.type || "chat";
@@ -936,6 +1193,31 @@ async function handleTwitchEventSubStop(req, res) {
   try {
     const body = await readJsonBody(req);
     stopTwitchEventSub(body.profileId || "stream-1");
+    sendJson(res, 200, { ok: true, source: "twitch" });
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
+}
+
+async function handleTwitchChatStart(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    const result = await startTwitchChatRelay({
+      channel: body.channel,
+      token: body.token,
+      streamName: body.streamName,
+      profileId: body.profileId
+    });
+    sendJson(res, 200, { ok: true, source: "twitch", ...result });
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+  }
+}
+
+async function handleTwitchChatStop(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    stopTwitchChatRelay(body.profileId || "stream-1");
     sendJson(res, 200, { ok: true, source: "twitch" });
   } catch (error) {
     sendJson(res, 400, { error: error.message });
@@ -1114,6 +1396,16 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/youtube/livechat/stream") {
+    handleYouTubeLivechatStream(req, res);
+    return;
+  }
+
+  if (url.pathname === "/youtube/livechat/push" && req.method === "POST") {
+    handleYouTubeLivechatPush(req, res);
+    return;
+  }
+
   if (url.pathname === "/hub/stream") {
     handleHubStream(req, res);
     return;
@@ -1151,6 +1443,16 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === "/twitch/eventsub/stop" && req.method === "POST") {
     handleTwitchEventSubStop(req, res);
+    return;
+  }
+
+  if (url.pathname === "/twitch/chat/start" && req.method === "POST") {
+    handleTwitchChatStart(req, res);
+    return;
+  }
+
+  if (url.pathname === "/twitch/chat/stop" && req.method === "POST") {
+    handleTwitchChatStop(req, res);
     return;
   }
 
@@ -1192,6 +1494,20 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/youtube/livechat/capture.js") {
+    fs.readFile(path.join(ROOT, "youtube-livechat-bridge", "content.js"), "utf8")
+      .then((script) => {
+        res.writeHead(200, {
+          "content-type": "text/javascript; charset=utf-8",
+          "cache-control": "no-store",
+          "access-control-allow-origin": "*"
+        });
+        res.end(script);
+      })
+      .catch(() => sendJson(res, 500, { error: "Could not read youtube-livechat-bridge/content.js" }));
+    return;
+  }
+
   if (url.pathname === "/" || url.pathname === "/overlay" || url.pathname === "/streamhub-contest.html") {
     fs.readFile(path.join(ROOT, "streamhub-contest.html"), "utf8")
       .then((html) => {
@@ -1217,7 +1533,7 @@ const server = http.createServer((req, res) => {
 
   sendJson(res, 404, {
     error: "Not found",
-    endpoints: ["/health", "/hub/stream", "/hub/push", "/hub/recent", "/x/stream?query=%23YourStreamTag", "/youtube/stream?url=YouTubeLiveUrl", "/pump/livechat/stream", "/kick/stream?channel=YourKickChannel"]
+    endpoints: ["/health", "/hub/stream", "/hub/push", "/hub/recent", "/x/stream?query=%23YourStreamTag", "/youtube/stream?url=YouTubeLiveUrl", "/youtube/livechat/stream", "/pump/livechat/stream", "/kick/stream?channel=YourKickChannel"]
   });
 });
 

@@ -52,6 +52,7 @@ Useful links:
 - X livechat bridge folder: `x-livechat-bridge`
 - YouTube API: https://console.cloud.google.com/apis/library/youtube.googleapis.com
 - YouTube live chat docs: https://developers.google.com/youtube/v3/live/docs/liveChatMessages/list
+- YouTube livechat bridge folder: `youtube-livechat-bridge`
 - Pump.fun livechat bridge folder: `pump-livechat-bridge`
 
 Twitch chat, follows, and subs setup:
@@ -93,6 +94,8 @@ Then search the JSON for:
 
 YouTube setup:
 
+API mode:
+
 1. Enable the YouTube Data API v3 in Google Cloud.
 2. Get a YouTube API key, or use a YouTube OAuth access token for private/owned streams.
 3. Enter a YouTube live URL, video ID, or `liveChatId`.
@@ -100,6 +103,21 @@ YouTube setup:
 5. Press `Connect YouTube`.
 
 StreamHub uses YouTube's official Live Chat API and follows YouTube's returned `pollingIntervalMillis`, with a default minimum of 15 seconds between chat polls so an 8-hour stream is much less likely to burn through daily quota.
+
+No-quota bridge mode:
+
+1. Load the optional `youtube-livechat-bridge` extension from `chrome://extensions/`.
+2. Paste a YouTube live URL into the YouTube card.
+3. Click `Open YouTube chat` to open the popout chat, or open:
+
+```text
+https://www.youtube.com/live_chat?is_popout=1&v=VIDEO_ID
+```
+
+4. Click `Connect YouTube Bridge`.
+5. Keep the YouTube chat tab open while streaming.
+
+Bridge mode reads the visible chat tab locally and does not use YouTube API quota. If Chrome asks for permission, click `Allow`, then refresh the YouTube chat tab once.
 
 Pump.fun setup:
 
