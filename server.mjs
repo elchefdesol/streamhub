@@ -868,6 +868,17 @@ async function handleXLivechatStream(req, res) {
 async function handleXLivechatPush(req, res) {
   try {
     const body = await readJsonBody(req);
+    if (body.type === "bridge-status") {
+      const message = body.url
+        ? `X livechat bridge detected on ${body.url}. Waiting for new chat messages.`
+        : "X livechat bridge detected. Waiting for new chat messages.";
+      for (const client of xLivechatClients) {
+        sendSse(client, "status", { source: "x", status: "connected", mode: "livechat-bridge", bridgeSeen: true, message });
+      }
+      sendJson(res, 200, { ok: true, type: "bridge-status", clients: xLivechatClients.size });
+      return;
+    }
+
     const items = Array.isArray(body.messages) ? body.messages : [body];
     let accepted = 0;
 
@@ -886,15 +897,23 @@ async function handleXLivechatPush(req, res) {
       }
 
       accepted += 1;
-      const createdAt = Number.isFinite(Number(item.ts)) ? new Date(Number(item.ts)).toISOString() : new Date().toISOString();
-      broadcastXLivechat({
+      const ts = Number.isFinite(Number(item.ts)) ? Number(item.ts) : Date.now();
+      const payload = {
         source: "x",
         id,
+        type: item.type || "chat",
+        event: item.event || "",
+        overlay: item.overlay !== false,
         user,
         text,
         badge: "LIVECHAT",
-        created_at: createdAt
-      });
+        created_at: new Date(ts).toISOString(),
+        ts
+      };
+      broadcastXLivechat(payload);
+      if (payload.type !== "activity" && payload.overlay !== false && rememberHubId(payload.id)) {
+        broadcastHub(payload);
+      }
     }
 
     sendJson(res, 200, { ok: true, accepted, clients: xLivechatClients.size });
@@ -949,14 +968,23 @@ async function handlePumpLivechatPush(req, res) {
       }
 
       accepted += 1;
-      broadcastPumpLivechat({
+      const ts = Number.isFinite(Number(item.ts)) ? Number(item.ts) : Date.now();
+      const payload = {
         source: "pump",
         id,
+        type: item.type || "chat",
+        event: item.event || "",
+        overlay: item.overlay !== false,
         user,
         text,
         badge: item.badge || "PUMP",
-        created_at: Number.isFinite(Number(item.ts)) ? new Date(Number(item.ts)).toISOString() : new Date().toISOString()
-      });
+        created_at: new Date(ts).toISOString(),
+        ts
+      };
+      broadcastPumpLivechat(payload);
+      if (payload.type !== "activity" && payload.overlay !== false && rememberHubId(payload.id)) {
+        broadcastHub(payload);
+      }
     }
 
     sendJson(res, 200, { ok: true, accepted, clients: pumpLivechatClients.size });

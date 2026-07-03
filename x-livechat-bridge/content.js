@@ -158,19 +158,34 @@
     };
   }
 
-  async function postMessages(messages) {
-    if (!messages.length) return;
+  async function postPayload(payload) {
     for (const endpoint of ENDPOINTS) {
       try {
         const response = await fetch(endpoint, {
           method: "POST",
           mode: "cors",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ messages })
+          body: JSON.stringify(payload)
         });
-        if (response.ok) return;
+        if (response.ok) return response.json().catch(() => ({ ok: true }));
       } catch {
       }
+    }
+    return null;
+  }
+
+  async function postStatus() {
+    const result = await postPayload({ type: "bridge-status", url: location.href, ts: Date.now() });
+    if (result) console.log("StreamHub X Livechat Bridge connected.", result);
+  }
+
+  async function postMessages(messages) {
+    if (!messages.length) return;
+    const result = await postPayload({ messages });
+    if (result) {
+      console.log(`StreamHub X Livechat Bridge sent ${messages.length} message(s).`, result);
+    } else {
+      console.warn("StreamHub X Livechat Bridge could not reach the local StreamHub server.");
     }
   }
 
@@ -215,6 +230,7 @@
     window.__streamHubXBridgeObserver.disconnect();
   }
 
+  postStatus();
   setTimeout(() => scan(document, true), 700);
   if (window.__streamHubXBridgeTimer) clearInterval(window.__streamHubXBridgeTimer);
   window.__streamHubXBridgeTimer = setInterval(() => scan(document), 1200);

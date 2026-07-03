@@ -1087,6 +1087,32 @@
     font-weight: 800;
     line-height: 1.25;
   }
+
+  body.overlay-mode .msg.buy[data-source="pump"] .meta-platform-icon {
+    background: rgba(38, 208, 124, .24);
+    box-shadow:
+      0 0 0 1px rgba(38, 208, 124, .42),
+      0 5px 16px rgba(38, 208, 124, .28);
+  }
+
+  body.overlay-mode .msg.buy[data-source="pump"] .user,
+  body.overlay-mode .msg.buy[data-source="pump"] .text {
+    color: #36f29b;
+    text-shadow:
+      0 2px 8px rgba(0, 0, 0, .85),
+      0 0 14px rgba(38, 208, 124, .38);
+  }
+
+  body.overlay-mode .msg.buy[data-source="pump"] .text {
+    font-size: 1.16rem;
+    letter-spacing: 0;
+  }
+
+  body.overlay-mode .msg.buy[data-source="pump"] .badge:not(.stream-badge) {
+    background: rgba(38, 208, 124, .24);
+    color: #caffdf;
+    box-shadow: 0 0 0 1px rgba(38, 208, 124, .34);
+  }
 </style>
 </head>
 <body class="setup-active">
@@ -1888,7 +1914,10 @@ function subscribeHubActivityInbox() {
   const handleActivityEvent = (event) => {
     try {
       const msg = JSON.parse(event.data);
-      if (msg.type === "activity") ingestHubMessage(msg);
+      const isExternalBuy = msg.event === "buy" || /^BUY\b/i.test(msg.text || "");
+      if (msg.type === "activity" || isExternalBuy || !state.streams[connectionKey(msg.source, msg.profileId || state.activeProfileId)]) {
+        ingestHubMessage(msg);
+      }
     } catch (error) {
       console.warn("StreamHub activity event skipped", error);
     }
@@ -1898,6 +1927,7 @@ function subscribeHubActivityInbox() {
     console.warn("StreamHub activity inbox disconnected. Check that the local server is still running.");
   };
   pollHubRecent();
+  hubPoll = setInterval(pollHubRecent, 1000);
 }
 
 function pruneRate() {
@@ -1924,8 +1954,9 @@ function messageNode(msg) {
   const src = sources[msg.source];
   const badge = msg.badge ? `<span class="badge">${escapeHtml(msg.badge)}</span>` : "";
   const streamBadge = msg.streamName ? `<span class="badge stream-badge">${escapeHtml(msg.streamName)}</span>` : "";
+  const isBuy = msg.event === "buy" || /^BUY\b/i.test(msg.text || "");
   const node = document.createElement("article");
-  node.className = `msg ${msg.type === "activity" ? "activity" : ""}`;
+  node.className = `msg ${msg.type === "activity" ? "activity" : ""} ${isBuy ? "buy" : ""}`;
   node.dataset.source = msg.source;
   node.dataset.id = msg.id;
   node.innerHTML = `
